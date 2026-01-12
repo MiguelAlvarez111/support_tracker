@@ -2,14 +2,14 @@
 Pydantic schemas for request/response validation.
 """
 from pydantic import BaseModel, Field, field_validator
-from datetime import date
+from datetime import date as date_type
 from typing import Optional
 
 
 class DailyMetricBase(BaseModel):
     """Base schema with common fields for DailyMetric."""
     agent_name: str = Field(..., description="Name of the agent (e.g., 'M. ALVAREZ')")
-    date: date = Field(..., description="Date of the metric record")
+    date: date_type = Field(..., description="Date of the metric record")
     tickets_processed: int = Field(..., ge=0, description="Number of tickets processed")
     ticket_goal: int = Field(..., ge=0, description="Goal for tickets processed that day")
     squadlinx_points: float = Field(..., ge=0.0, description="Squadlinx points registered")
@@ -32,7 +32,7 @@ class DailyMetricCreate(DailyMetricBase):
 class DailyMetricUpdate(BaseModel):
     """Schema for updating an existing DailyMetric."""
     agent_name: Optional[str] = Field(None, description="Name of the agent")
-    date: Optional[date] = Field(None, description="Date of the metric record")
+    date: Optional[date_type] = Field(None, description="Date of the metric record")
     tickets_processed: Optional[int] = Field(None, ge=0, description="Number of tickets processed")
     ticket_goal: Optional[int] = Field(None, ge=0, description="Goal for tickets processed")
     squadlinx_points: Optional[float] = Field(None, ge=0.0, description="Squadlinx points registered")
