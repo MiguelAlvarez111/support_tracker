@@ -166,6 +166,7 @@ def process_file(file_path):
 
 def process_file_csv(file_path):
     print(f"Reading {file_path}...")
+    import csv 
     
     db = SessionLocal()
     try:
@@ -176,67 +177,42 @@ def process_file_csv(file_path):
         processed_count = 0
         
         with open(file_path, 'r', encoding='utf-8') as f:
-            lines = [line.rstrip() for line in f if line.strip()]
+            reader = csv.reader(f, delimiter='\t')
+            rows = list(reader)
             
-        # 1. Find Date Header
-        header_line = None
+        # 1. HEADER PARSING
+        header_row = None
         header_idx = -1
-        for i, line in enumerate(lines):
-            if "1 ene" in line.lower():
-                header_line = line
+        for i, row in enumerate(rows):
+            line_str = " ".join(row)
+            if "1 ene" in line_str.lower():
+                header_row = row
                 header_idx = i
                 break
         
-        if not header_line:
+        if not header_row:
             print("Date header not found")
             return
 
-        # 2. Determine Delimiter (Tab or Multiple Spaces)
-        # We'll rely on re.split to handle both scenarios dynamically
-        
-        # Split header
-        header_parts = re.split(r'\t+| {2,}', header_line)
-        header_parts = [p.strip() for p in header_parts if p.strip()] # Clean
-        
-        # Map Column Index to Date
-        # Since we are splitting by regex, the indices might be compressed (no empty strings for multiple tabs)
-        # This makes mapping by index tricky if there are empty columns in the original.
-        # BUT, looking at the user data, "1 ene." is followed by T.P, M.A data in subsequent rows.
-        # The header row itself usually has sparse dates: "1 ene. [GAP] 2 ene. [GAP]"
-        # Let's try to map by "finding" the dates in the cleaned list.
-        
-        # Actually, simpler approach for this specific messy format:
-        # The dates strictly define the blocks.
-        # "1 ene." marks the start of the block. The next columns correspond to it until "2 ene."
-        
-        dates_in_order = []
-        for part in header_parts:
-            d = parse_header_date(part)
+        # Map column index to date
+        dates_map = {} # col_idx -> date_obj
+        for c_idx, cell in enumerate(header_row):
+            d = parse_header_date(cell)
             if d:
-                dates_in_order.append(d)
+                dates_map[c_idx] = d
                 
-        print(f"Found {len(dates_in_order)} dates.")
+        print(f"Found {len(dates_map)} dates.")
 
-        # 3. Process Agent Rows
-        # Skip sub-header rows
+        # 2. DATA PARSING
         start_row = header_idx + 1
-        while start_row < len(lines):
-            line = lines[start_row]
-            if "T. P" in line or "M. A" in line or "TOTAL" in line:
-                start_row += 1
-            else:
-                break
         
-        for line in lines[start_row:]:
-            if "TOTAL" in line or "CONTINGENCIA" in line: continue
-            
-            # Split line
-            parts = re.split(r'\t+| {2,}', line) # Split by tab or 2+ spaces
-            parts = [p.strip() for p in parts if p.strip()]
-            
-            if not parts: continue
-            
-            raw_name = parts[0]
+        for row in rows[start_row:]:
+            line_str = "".join(row)
+            if "T. P" in line_str or "M. A" in line_str or "TOTAL" in line_str or "CONTINGENCIA" in line_str or not line_str.strip():
+                continue
+                
+            raw_name = row[0].strip()
+            if not raw_name: continue
             
             # Find Agent
             agent_id = find_agent(db, raw_name, {k: v.id for k,v in agent_map.items()})
@@ -246,33 +222,18 @@ def process_file_csv(file_path):
                 
             print(f"Processing {raw_name} (ID: {agent_id})...")
             
-            # Data values start at index 1
-            # We assume triplets: TP, MA, DM
-            # So index 1 = Date 1 TP, index 2 = Date 1 MA, index 3 = Date 1 DM
-            # index 4 = Date 2 TP...
-            
-            # Check length match
-            # Expected data columns = len(dates_in_order) * 3
-            # parts includes name at 0, so total len should be 1 + (dates * 3)
-            
-            date_idx = 0
-            val_idx = 1
-            
-            while val_idx < len(parts) and date_idx < len(dates_in_order):
-                # Retrieve Date Object
-                date_obj = dates_in_order[date_idx]
-                
-                # Get Values (TP, MA) - DM is ignored
-                # Need at least 2 values (TP, MA) to proceed safe
-                if val_idx + 1 >= len(parts): break
-                
+            # Extract Data
+            for col_idx, date_obj in dates_map.items():
                 try:
-                    tp_str = parts[val_idx].replace('.', '').replace(',', '')
-                    ma_str = parts[val_idx+1].replace('.', '').replace(',', '')
+                    # Assumed structure: Date (TP), Date+1 (MA), Date+2 (DM)
+                    if col_idx + 1 >= len(row): break
+                    
+                    tp_str = row[col_idx].strip().replace('.', '').replace(',', '')
+                    ma_str = row[col_idx+1].strip().replace('.', '').replace(',', '')
                     
                     # Handle empty or dash
-                    tickets_processed = int(tp_str) if tp_str.isdigit() else 0
-                    tickets_goal = int(ma_str) if ma_str.isdigit() else 0
+                    tickets_processed = int(tp_str) if tp_str and tp_str.isdigit() else 0
+                    tickets_goal = int(ma_str) if ma_str and ma_str.isdigit() else 0
                     
                     # Upsert
                     perf = db.query(DailyPerformance).filter_by(
@@ -297,17 +258,6 @@ def process_file_csv(file_path):
                     processed_count += 1
                 except Exception as e:
                     print(f"Error parsing values for {date_obj}: {e}")
-                    
-                # Advancing index: 3 columns per date (TP, MA, DM)
-                # But wait, maybe the split consumed empty columns? 
-                # If the file had "82 [tab] 3 [tab] 200", split gives [82, 3, 200].
-                # If there were empty columns "0 [tab] 0 [tab] 0", split gives [0, 0, 0].
-                # This logic relies on every column being populated or present.
-                # If the user copy-paste has "0" for empty values, we are good.
-                # User data has "0" in most places.
-                
-                val_idx += 3 
-                date_idx += 1
             
             db.commit() # Commit per agent
             
