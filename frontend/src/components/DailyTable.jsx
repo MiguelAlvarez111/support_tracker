@@ -1,10 +1,14 @@
 import { useRef, useState } from 'react'
-import { Copy, Download, Loader2 } from 'lucide-react'
+import { Copy, Download, Loader2, Trash2, FileSpreadsheet } from 'lucide-react'
 import html2canvas from 'html2canvas'
+import axios from 'axios'
 
-function DailyTable({ data }) {
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+function DailyTable({ data, onDelete }) {
   const tableRef = useRef(null)
   const [copying, setCopying] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
 
   const formatDate = (dateString) => {
     // dateString is "YYYY-MM-DD"
@@ -15,6 +19,64 @@ function DailyTable({ data }) {
       month: 'short',
       year: 'numeric'
     })
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar este registro?')) return
+
+    setDeletingId(id)
+    try {
+      await axios.delete(`${API_BASE_URL}/api/performances/${id}`)
+      if (onDelete) onDelete()
+    } catch (error) {
+      console.error('Error deleting record:', error)
+      alert('Error al eliminar el registro')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const handleExportCSV = () => {
+    if (!data || data.length === 0) return
+
+    // Define headers
+    const headers = ['Fecha', 'Agente', 'Tickets Procesados', 'Meta Tickets', 'Squadlinx', 'Meta Squadlinx', 'Estado']
+
+    // Format data rows
+    const rows = data.map(item => {
+      const ticketsActual = item.tickets_processed ?? item.tickets_actual ?? 0
+      const ticketsGoal = item.ticket_goal ?? item.tickets_goal ?? 0
+      const pointsActual = item.squadlinx_points ?? item.points_actual ?? 0
+      const pointsGoal = item.squadlinx_goal ?? item.points_goal ?? 0
+      const agentName = item.agent_name ?? `Agente ${item.agent_id}`
+      const meetsGoal = ticketsActual >= ticketsGoal ? 'Cumplido' : 'No Cumplido'
+
+      return [
+        item.date,
+        agentName,
+        ticketsActual,
+        ticketsGoal,
+        pointsActual,
+        pointsGoal,
+        meetsGoal
+      ]
+    })
+
+    // Combine headers and rows
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n')
+
+    // Create blob and download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `reporte_soporte_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const handleCopyAsImage = async () => {
@@ -107,6 +169,13 @@ function DailyTable({ data }) {
         </div>
         <div className="flex gap-3">
           <button
+            onClick={handleExportCSV}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <FileSpreadsheet className="w-5 h-5" />
+            Excel (CSV)
+          </button>
+          <button
             onClick={handleCopyAsImage}
             disabled={copying}
             className="btn-primary flex items-center gap-2"
@@ -119,7 +188,7 @@ function DailyTable({ data }) {
             ) : (
               <>
                 <Copy className="w-5 h-5" />
-                Copiar como Imagen
+                Copiar Imagen
               </>
             )}
           </button>
@@ -129,7 +198,7 @@ function DailyTable({ data }) {
             className="btn-secondary flex items-center gap-2"
           >
             <Download className="w-5 h-5" />
-            Descargar
+            Descargar Imagen
           </button>
         </div>
       </div>
@@ -164,6 +233,11 @@ function DailyTable({ data }) {
                       <th className="px-4 py-3 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
                         Estado
                       </th>
+                      {onDelete && (
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          Acciones
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-dark-800">
@@ -205,12 +279,28 @@ function DailyTable({ data }) {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${meetsGoal
-                                ? 'bg-green-900/30 text-green-300 border border-green-800'
-                                : 'bg-red-900/30 text-red-300 border border-red-800'
+                              ? 'bg-green-900/30 text-green-300 border border-green-800'
+                              : 'bg-red-900/30 text-red-300 border border-red-800'
                               }`}>
                               {meetsGoal ? '✓ Meta alcanzada' : '✗ Meta no alcanzada'}
                             </span>
                           </td>
+                          {onDelete && (
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => handleDelete(item.id)}
+                                disabled={deletingId === item.id}
+                                className="p-1 text-gray-400 hover:text-red-400 transition-colors"
+                                title="Eliminar registro"
+                              >
+                                {deletingId === item.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       )
                     })}

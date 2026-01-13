@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, AlertCircle, CheckCircle2, RefreshCw, Save, Calendar, Target } from 'lucide-react'
+import { Loader2, AlertCircle, CheckCircle2, RefreshCw, Save, Calendar, Target, History, List } from 'lucide-react'
 import axios from 'axios'
 import DailyTable from './DailyTable'
 import SprintHeatmap from './SprintHeatmap'
@@ -17,11 +17,14 @@ function Dashboard() {
     const day = String(today.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   })
+  const [datePreset, setDatePreset] = useState('today') // 'today', 'yesterday', 'custom'
+
   const [globalTicketsGoal, setGlobalTicketsGoal] = useState(200)
   const [globalPointsGoal, setGlobalPointsGoal] = useState(8.0)
 
   const [processedData, setProcessedData] = useState([])
   const [historicalMetrics, setHistoricalMetrics] = useState([])
+  const [showHistory, setShowHistory] = useState(false)
 
   // Teams and Agents
   const [teams, setTeams] = useState([])
@@ -126,6 +129,25 @@ function Dashboard() {
     }
   }, [selectedTeamId])
 
+  // Handle Date Preset Change
+  const handleDatePresetChange = (preset) => {
+    setDatePreset(preset)
+    const today = new Date()
+
+    if (preset === 'today') {
+      const year = today.getFullYear()
+      const month = String(today.getMonth() + 1).padStart(2, '0')
+      const day = String(today.getDate()).padStart(2, '0')
+      setReportDate(`${year}-${month}-${day}`)
+    } else if (preset === 'yesterday') {
+      today.setDate(today.getDate() - 1)
+      const year = today.getFullYear()
+      const month = String(today.getMonth() + 1).padStart(2, '0')
+      const day = String(today.getDate()).padStart(2, '0')
+      setReportDate(`${year}-${month}-${day}`)
+    }
+  }
+
   // Handle manual data changes
   const handleManualDataChange = (agentId, field, value) => {
     setManualData(prev => ({
@@ -201,6 +223,8 @@ function Dashboard() {
 
       setProcessedData(response.data)
       setSuccess(`Datos guardados exitosamente. ${response.data.length} registros procesados.`)
+      // Automatically show history when saving
+      setShowHistory(true)
 
       // Clear manual data
       const clearedData = {}
@@ -298,13 +322,32 @@ function Dashboard() {
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Fecha del Reporte *
             </label>
-            <input
-              type="date"
-              value={reportDate}
-              onChange={(e) => setReportDate(e.target.value)}
-              className="input-field"
-              required
-            />
+            <div className="flex flex-col gap-2">
+              <select
+                value={datePreset}
+                onChange={(e) => handleDatePresetChange(e.target.value)}
+                className="input-field"
+              >
+                <option value="today">Hoy</option>
+                <option value="yesterday">Ayer</option>
+                <option value="custom">Personalizado...</option>
+              </select>
+
+              {datePreset === 'custom' && (
+                <input
+                  type="date"
+                  value={reportDate}
+                  onChange={(e) => setReportDate(e.target.value)}
+                  className="input-field"
+                  required
+                />
+              )}
+              {datePreset !== 'custom' && (
+                <div className="text-sm text-gray-400 px-1">
+                  Fecha seleccionada: {reportDate}
+                </div>
+              )}
+            </div>
           </div>
 
           <div>
@@ -426,9 +469,6 @@ function Dashboard() {
                       >
                         <td className="py-3 px-4 text-gray-100">
                           {agent.full_name}
-                          <span className="ml-2 text-xs text-gray-500 font-mono">
-                            ({agent.excel_alias})
-                          </span>
                         </td>
                         <td className="py-3 px-4">
                           <input
@@ -533,11 +573,6 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Results Table */}
-      {processedData.length > 0 && (
-        <DailyTable data={processedData} />
-      )}
-
       {/* Sprint Stats */}
       <SprintStats metrics={historicalMetrics} agents={agents} />
 
@@ -572,6 +607,43 @@ function Dashboard() {
         </div>
         <SprintHeatmap metrics={historicalMetrics} agentsList={agents} />
       </div>
+
+      {/* Full History View */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <History className="w-6 h-6 text-primary-400" />
+            <div>
+              <h2 className="text-2xl font-semibold text-white mb-1">
+                Historial de Registros
+              </h2>
+              <p className="text-gray-400 text-sm">
+                Consulta y gestiona todos los registros históricos
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <List className="w-5 h-5" />
+            {showHistory ? 'Ocultar Historial' : 'Ver Todos los Registros'}
+          </button>
+        </div>
+
+        {showHistory && (
+          <div className="animate-fade-in">
+            {historicalMetrics.length > 0 ? (
+              <DailyTable data={historicalMetrics} onDelete={fetchHistoricalMetrics} />
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                No hay registros históricos disponibles.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
     </div>
   )
 }

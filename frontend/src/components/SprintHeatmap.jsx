@@ -1,8 +1,74 @@
-import { useState, useMemo, Fragment } from 'react'
-import { Calendar, TrendingUp, AlertTriangle } from 'lucide-react'
+import { useState, useMemo, Fragment, useRef } from 'react'
+import { Calendar, TrendingUp, AlertTriangle, Copy, Download, Loader2 } from 'lucide-react'
+import html2canvas from 'html2canvas'
 
 function SprintHeatmap({ metrics = [], agentsList = [] }) {
   const [daysRange, setDaysRange] = useState(10)
+  const heatmapRef = useRef(null)
+  const [copying, setCopying] = useState(false)
+
+  const handleCopyAsImage = async () => {
+    if (!heatmapRef.current) return
+
+    setCopying(true)
+    try {
+      const canvas = await html2canvas(heatmapRef.current, {
+        backgroundColor: '#020617', // dark-950
+        scale: 2,
+        logging: false,
+        useCORS: true,
+      })
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]).then(() => {
+            alert('Imagen copiada al portapapeles')
+          }).catch((err) => {
+            console.error('Error copying to clipboard:', err)
+            // Fallback: download image
+            const url = canvas.toDataURL()
+            const link = document.createElement('a')
+            link.download = `heatmap-${new Date().toISOString().split('T')[0]}.png`
+            link.href = url
+            link.click()
+            alert('Imagen descargada (el navegador no soporta copiar al portapapeles)')
+          })
+        }
+      })
+    } catch (error) {
+      console.error('Error generating image:', error)
+      alert('Error al generar la imagen')
+    } finally {
+      setCopying(false)
+    }
+  }
+
+  const handleDownloadImage = async () => {
+    if (!heatmapRef.current) return
+
+    setCopying(true)
+    try {
+      const canvas = await html2canvas(heatmapRef.current, {
+        backgroundColor: '#020617',
+        scale: 2,
+        logging: false,
+        useCORS: true,
+      })
+
+      const url = canvas.toDataURL()
+      const link = document.createElement('a')
+      link.download = `heatmap-${new Date().toISOString().split('T')[0]}.png`
+      link.href = url
+      link.click()
+    } catch (error) {
+      console.error('Error generating image:', error)
+      alert('Error al generar la imagen')
+    } finally {
+      setCopying(false)
+    }
+  }
 
   // Helper function to group metrics by agent and date
   const groupedData = useMemo(() => {
@@ -95,10 +161,10 @@ function SprintHeatmap({ metrics = [], agentsList = [] }) {
   }
 
   return (
-    <div className="card p-6">
-      {/* Header with date range selector */}
+    <div className="card p-6" ref={heatmapRef}>
+      {/* Header with date range selector and export buttons */}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 gap-4">
           <div>
             <h2 className="text-2xl font-semibold text-white mb-1">
               Sprint Heatmap
@@ -107,22 +173,43 @@ function SprintHeatmap({ metrics = [], agentsList = [] }) {
               Visualización de rendimiento por agente y día
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Calendar className="w-5 h-5 text-gray-400" />
-            <label className="text-sm font-medium text-gray-300">
-              Rango:
-            </label>
-            <select
-              value={daysRange}
-              onChange={(e) => setDaysRange(parseInt(e.target.value))}
-              className="input-field w-32"
-            >
-              <option value={7}>Últimos 7 días</option>
-              <option value={10}>Últimos 10 días</option>
-              <option value={14}>Últimos 14 días</option>
-              <option value={21}>Últimos 21 días</option>
-              <option value={30}>Últimos 30 días</option>
-            </select>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-gray-400" />
+              <label className="text-sm font-medium text-gray-300">
+                Rango:
+              </label>
+              <select
+                value={daysRange}
+                onChange={(e) => setDaysRange(parseInt(e.target.value))}
+                className="input-field w-32"
+              >
+                <option value={7}>Últimos 7 días</option>
+                <option value={10}>Últimos 10 días</option>
+                <option value={14}>Últimos 14 días</option>
+                <option value={21}>Últimos 21 días</option>
+                <option value={30}>Últimos 30 días</option>
+              </select>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleCopyAsImage}
+                disabled={copying}
+                className="btn-primary w-10 h-10 p-0 flex items-center justify-center rounded-lg"
+                title="Copiar Heatmap"
+              >
+                {copying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Copy className="w-5 h-5" />}
+              </button>
+              <button
+                onClick={handleDownloadImage}
+                disabled={copying}
+                className="btn-secondary w-10 h-10 p-0 flex items-center justify-center rounded-lg"
+                title="Descargar Heatmap"
+              >
+                <Download className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -309,4 +396,3 @@ function SprintHeatmap({ metrics = [], agentsList = [] }) {
 }
 
 export default SprintHeatmap
-

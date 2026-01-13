@@ -88,3 +88,24 @@ async def bulk_create_performances(
             detail=f"Error processing bulk performances: {str(e)}"
         )
 
+
+@router.delete("/{performance_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_performance(
+    performance_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a specific daily performance record by ID.
+    """
+    perf = db.query(DailyPerformance).filter(DailyPerformance.id == performance_id).first()
+    if not perf:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Performance with id {performance_id} not found"
+        )
+    
+    db.delete(perf)
+    db.commit()
+    logger.info(f"Deleted performance {performance_id}")
+    return None
+

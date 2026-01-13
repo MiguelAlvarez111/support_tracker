@@ -29,7 +29,10 @@ function TeamSettings() {
 
   // Fetch teams
   const fetchTeams = async () => {
-    setLoadingTeams(true)
+    // Only show loading state if we don't have teams yet (initial load)
+    if (teams.length === 0) {
+      setLoadingTeams(true)
+    }
     try {
       const response = await axios.get(`${API_BASE_URL}/api/teams/`)
       setTeams(response.data)
@@ -103,7 +106,10 @@ function TeamSettings() {
       setSuccess('Equipo creado exitosamente')
       setTeamFormData({ name: '' })
       setIsAddTeamModalOpen(false)
-      fetchTeams()
+
+      // Await fetch to ensure list is updated before selection
+      await fetchTeams()
+
       // Automatically select the new team
       if (response.data && response.data.id) {
         setSelectedTeamId(response.data.id)
