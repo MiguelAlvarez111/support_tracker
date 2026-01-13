@@ -31,7 +31,10 @@ function TeamSettings() {
   const fetchTeams = async () => {
     setLoadingTeams(true)
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/teams`)
+      const url = `${API_BASE_URL}/api/teams`
+      console.log('[TeamSettings] Fetching teams from:', url)
+      const response = await axios.get(url)
+      console.log('[TeamSettings] Teams fetched:', response.data)
       setTeams(response.data)
       
       // Auto-select first team if available
@@ -123,18 +126,59 @@ function TeamSettings() {
     setSuccess(null)
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/teams`, {
-        name: teamFormData.name.trim()
+      // Ensure URL doesn't have trailing slash to avoid redirects
+      const url = `${API_BASE_URL}/api/teams`.replace(/\/$/, '')
+      const payload = { name: teamFormData.name.trim() }
+      console.log('[TeamSettings] Creating team:', { url, payload, API_BASE_URL })
+      
+      const response = await axios.post(url, payload, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        maxRedirects: 5 // Allow redirects but limit to prevent loops
       })
       
+      console.log('[TeamSettings] Team created successfully:', response.data)
       setSuccess('Equipo creado exitosamente')
       handleCloseTeamModal()
       fetchTeams()
       // Auto-select the newly created team
       setSelectedTeamId(response.data.id)
     } catch (err) {
-      console.error('Error creating team:', err)
-      setError(err.response?.data?.detail || err.message || 'Error al crear el equipo')
+      console.error('[TeamSettings] Error creating team:', {
+        error: err,
+        message: err.message,
+        code: err.code,
+        response: err.response ? {
+          data: err.response.data,
+          status: err.response.status,
+          statusText: err.response.statusText,
+          headers: err.response.headers
+        } : null,
+        config: err.config ? {
+          url: err.config.url,
+          method: err.config.method,
+          baseURL: err.config.baseURL
+        } : null
+      })
+      
+      // More specific error messages
+      let errorMessage = 'Error al crear el equipo'
+      if (err.response?.data?.detail) {
+        errorMessage = err.response.data.detail
+      } else if (err.response?.status === 400) {
+        errorMessage = 'Datos inválidos. Verifica el nombre del equipo.'
+      } else if (err.response?.status === 409) {
+        errorMessage = 'Ya existe un equipo con ese nombre.'
+      } else if (err.response?.status >= 500) {
+        errorMessage = 'Error del servidor. Intenta más tarde.'
+      } else if (err.code === 'ECONNREFUSED' || err.code === 'ERR_NETWORK') {
+        errorMessage = 'No se pudo conectar al servidor. Verifica tu conexión.'
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
