@@ -1,7 +1,7 @@
 """
 SQLAlchemy models for the support tracker application.
 """
-from sqlalchemy import Column, Integer, String, Date, Float, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Date, Float, Boolean, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import date, datetime
 from database import Base
@@ -55,6 +55,11 @@ class DailyPerformance(Base):
     including tickets processed, goals, and squadlinx points.
     """
     __tablename__ = "daily_performances"
+    
+    # Unique constraint to prevent duplicate records for same agent and date
+    __table_args__ = (
+        UniqueConstraint('agent_id', 'date', name='uq_agent_date'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)

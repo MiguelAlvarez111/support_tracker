@@ -6,13 +6,16 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from database import get_db
 from models import DailyPerformance, Agent
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/metrics", tags=["Metrics"])
+
+# Burnout threshold: 88 hours per sprint (accumulated)
+BURNOUT_THRESHOLD_HOURS = 88.0
 
 
 @router.get(
@@ -22,6 +25,7 @@ router = APIRouter(prefix="/api/metrics", tags=["Metrics"])
 async def get_metrics(
     limit: int = Query(1000, ge=1, le=10000, description="Maximum number of records to return"),
     team_id: Optional[int] = Query(None, description="Filter by team ID"),
+    sprint_days: int = Query(10, ge=1, le=30, description="Number of days to calculate sprint burnout"),
     db: Session = Depends(get_db)
 ):
     """
@@ -35,9 +39,10 @@ async def get_metrics(
     - ticket_goal: Goal for tickets (tickets_goal)
     - squadlinx_points: Actual squadlinx points (points_actual)
     - squadlinx_goal: Goal for squadlinx points (points_goal)
-    - is_burnout: Whether agent exceeded burnout threshold (points_actual > 8.0)
+    - is_burnout: Whether agent exceeded burnout threshold (88h accumulated in sprint)
+    - accumulated_hours: Total hours accumulated in sprint period
     """
-    logger.info(f"Getting metrics: limit={limit}, team_id={team_id}")
+    logger.info(f"Getting metrics: limit={limit}, team_id={team_id}, sprint_days={sprint_days}")
     try:
         # Build query
         query = db.query(
@@ -57,11 +62,25 @@ async def get_metrics(
             Agent.full_name
         ).limit(limit).all()
         
+        # Calculate sprint burnout based on accumulated hours over sprint_days
+        today = date.today()
+        sprint_start = today - timedelta(days=sprint_days)
+        
+        # Build agent accumulated hours map for the sprint period
+        agent_accumulated_hours = {}
+        for perf, agent in results:
+            perf_date = perf.date if isinstance(perf.date, date) else datetime.strptime(str(perf.date), '%Y-%m-%d').date()
+            if perf_date >= sprint_start:
+                if agent.id not in agent_accumulated_hours:
+                    agent_accumulated_hours[agent.id] = 0.0
+                agent_accumulated_hours[agent.id] += perf.points_actual
+        
         # Transform to frontend format
         metrics = []
         for perf, agent in results:
-            # Calculate burnout: points_actual > 8.0 indicates burnout risk
-            is_burnout = perf.points_actual > 8.0
+            # Burnout is based on accumulated sprint hours > 88
+            accumulated = agent_accumulated_hours.get(agent.id, 0.0)
+            is_burnout = accumulated > BURNOUT_THRESHOLD_HOURS
             
             metric = {
                 "id": perf.id,
@@ -76,7 +95,8 @@ async def get_metrics(
                 "points_actual": perf.points_actual,  # Alias for compatibility
                 "squadlinx_goal": perf.points_goal,
                 "points_goal": perf.points_goal,  # Alias for compatibility
-                "is_burnout": is_burnout
+                "is_burnout": is_burnout,
+                "accumulated_hours": accumulated  # Total hours in sprint period
             }
             metrics.append(metric)
         

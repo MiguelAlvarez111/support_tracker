@@ -120,6 +120,14 @@ class DailyPerformanceBase(BaseModel):
     points_actual: float = Field(..., ge=0.0, description="Actual squadlinx points registered")
     points_goal: float = Field(..., ge=0.0, description="Goal for squadlinx points")
 
+    @field_validator('date')
+    @classmethod
+    def validate_date_not_future(cls, v):
+        """Ensure date is not in the future."""
+        if v > date_type.today():
+            raise ValueError('Cannot create performance records for future dates')
+        return v
+
 
 class DailyPerformanceCreate(DailyPerformanceBase):
     """Schema for creating a new DailyPerformance."""

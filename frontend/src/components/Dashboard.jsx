@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Loader2, AlertCircle, CheckCircle2, RefreshCw, Save, Calendar, Target } from 'lucide-react'
 import axios from 'axios'
 import DailyTable from './DailyTable'
@@ -230,12 +230,17 @@ function Dashboard() {
     }
   }
 
-  const fetchHistoricalMetrics = async () => {
+  // Memoized function to fetch historical metrics
+  const fetchHistoricalMetrics = useCallback(async () => {
     console.log('[Dashboard] fetchHistoricalMetrics: Starting to fetch metrics')
     setLoadingMetrics(true)
     try {
       const url = `${API_BASE_URL}/api/metrics`
-      const params = { limit: 1000 }
+      // Filter by selected team if available
+      const params = { 
+        limit: 1000,
+        ...(selectedTeamId && { team_id: selectedTeamId })
+      }
       console.log(`[Dashboard] fetchHistoricalMetrics: API call - URL: ${url}`, params)
       const response = await axios.get(url, { params })
       console.log(`[Dashboard] fetchHistoricalMetrics: Success - received ${response.data.length} metrics`)
@@ -252,24 +257,23 @@ function Dashboard() {
       setLoadingMetrics(false)
       console.log('[Dashboard] fetchHistoricalMetrics: Finished')
     }
-  }
+  }, [selectedTeamId])
 
-  // Load historical metrics on component mount
+  // Load historical metrics when team changes or on component mount
   useEffect(() => {
     fetchHistoricalMetrics()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [fetchHistoricalMetrics])
 
   // Refresh historical metrics after successful data upload
   useEffect(() => {
     if (success && processedData.length > 0) {
       // Small delay to ensure backend has processed the data
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         fetchHistoricalMetrics()
       }, 500)
+      return () => clearTimeout(timer)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [success, processedData.length])
+  }, [success, processedData.length, fetchHistoricalMetrics])
 
   return (
     <div className="space-y-6">

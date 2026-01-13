@@ -166,7 +166,15 @@ function DailyTable({ data }) {
                   </thead>
                   <tbody className="divide-y divide-dark-800">
                     {dateItems.map((item) => {
-                      const meetsGoal = item.tickets_processed >= item.ticket_goal
+                      // Handle both data formats (from bulk endpoint and from metrics endpoint)
+                      const ticketsActual = item.tickets_processed ?? item.tickets_actual ?? 0
+                      const ticketsGoal = item.ticket_goal ?? item.tickets_goal ?? 0
+                      const pointsActual = item.squadlinx_points ?? item.points_actual ?? 0
+                      const pointsGoal = item.squadlinx_goal ?? item.points_goal ?? 0
+                      const agentName = item.agent_name ?? `Agente ${item.agent_id}`
+                      const isBurnout = item.is_burnout ?? (pointsActual > 8.0)
+                      
+                      const meetsGoal = ticketsActual >= ticketsGoal
                       const rowBgColor = meetsGoal 
                         ? 'bg-green-900/10 hover:bg-green-900/20' 
                         : 'bg-red-900/10 hover:bg-red-900/20'
@@ -177,23 +185,23 @@ function DailyTable({ data }) {
                           className={`${rowBgColor} transition-colors duration-150`}
                         >
                           <td className="px-4 py-3 text-sm font-medium text-gray-200">
-                            {item.agent_name}
+                            {agentName}
                           </td>
                           <td className={`px-4 py-3 text-sm text-center font-medium ${
                             meetsGoal ? 'text-green-300' : 'text-red-300'
                           }`}>
-                            {item.tickets_processed}
+                            {ticketsActual}
                           </td>
                           <td className="px-4 py-3 text-sm text-center text-gray-300">
-                            {item.ticket_goal}
+                            {ticketsGoal}
                           </td>
                           <td className={`px-4 py-3 text-sm text-center font-semibold ${
-                            item.is_burnout ? 'text-red-500' : 'text-gray-300'
+                            isBurnout ? 'text-red-500' : 'text-gray-300'
                           }`}>
-                            {item.squadlinx_points.toFixed(1)}
+                            {typeof pointsActual === 'number' ? pointsActual.toFixed(1) : '0.0'}
                           </td>
                           <td className="px-4 py-3 text-sm text-center text-gray-300">
-                            {item.squadlinx_goal.toFixed(1)}
+                            {typeof pointsGoal === 'number' ? pointsGoal.toFixed(1) : '0.0'}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
