@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, AlertCircle, CheckCircle2, RefreshCw, Save, Calendar, Target, History, List } from 'lucide-react'
+import { Loader2, AlertCircle, CheckCircle2, RefreshCw, Save, Calendar, Target, History, List, Users, BarChart3, ArrowDown } from 'lucide-react'
 import axios from 'axios'
 import DailyTable from './DailyTable'
 import SprintHeatmap from './SprintHeatmap'
@@ -55,52 +55,33 @@ function Dashboard() {
 
   // Fetch teams
   const fetchTeams = async () => {
-    console.log('[Dashboard] fetchTeams: Starting to fetch teams')
     setLoadingTeams(true)
-    setError(null) // Clear any previous errors
+    setError(null)
     try {
-      console.log(`[Dashboard] fetchTeams: API URL: ${API_BASE_URL}/api/teams/`)
       const response = await axios.get(`${API_BASE_URL}/api/teams/`)
-      console.log(`[Dashboard] fetchTeams: Success - received ${response.data.length} teams`, response.data)
       setTeams(response.data)
       if (response.data.length > 0 && !selectedTeamId) {
-        console.log(`[Dashboard] fetchTeams: Setting default team: ${response.data[0].id}`)
         setSelectedTeamId(response.data[0].id)
       }
     } catch (err) {
-      console.error('[Dashboard] fetchTeams: Error fetching teams', {
-        error: err,
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        url: `${API_BASE_URL}/api/teams`
-      })
-      // Only show error if it's a real error, not just no teams
       if (err.response?.status !== 404) {
         setError('Error al cargar los equipos')
       }
     } finally {
       setLoadingTeams(false)
-      console.log('[Dashboard] fetchTeams: Finished')
     }
   }
 
   // Fetch active agents for selected team
   const fetchAgents = async (teamId) => {
-    if (!teamId) {
-      console.log('[Dashboard] fetchAgents: No teamId provided, skipping')
-      return
-    }
+    if (!teamId) return
 
-    console.log(`[Dashboard] fetchAgents: Starting to fetch agents for teamId: ${teamId}`)
     setLoadingAgents(true)
-    setError(null) // Clear any previous errors
+    setError(null)
     try {
       const url = `${API_BASE_URL}/api/agents/`
       const params = { team_id: teamId, is_active: true }
-      console.log(`[Dashboard] fetchAgents: API call - URL: ${url}`, params)
       const response = await axios.get(url, { params })
-      console.log(`[Dashboard] fetchAgents: Success - received ${response.data.length} agents`, response.data)
       setAgents(response.data)
 
       // Initialize manual data
@@ -114,19 +95,10 @@ function Dashboard() {
         }
       })
       setManualData(initialData)
-      console.log(`[Dashboard] fetchAgents: Initialized manual data for ${Object.keys(initialData).length} agents`)
     } catch (err) {
-      console.error('[Dashboard] fetchAgents: Error fetching agents', {
-        error: err,
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        teamId
-      })
       setError('Error al cargar los agentes')
     } finally {
       setLoadingAgents(false)
-      console.log('[Dashboard] fetchAgents: Finished')
     }
   }
 
@@ -154,20 +126,16 @@ function Dashboard() {
 
   // Handle manual save
   const handleManualSave = async () => {
-    console.log('[Dashboard] handleManualSave: Starting save operation')
     if (!selectedTeamId) {
-      console.warn('[Dashboard] handleManualSave: No team selected')
       setError('Por favor selecciona un equipo')
       return
     }
 
     if (!reportDate) {
-      console.warn('[Dashboard] handleManualSave: No report date selected')
       setError('Por favor selecciona una fecha')
       return
     }
 
-    console.log(`[Dashboard] handleManualSave: Saving for teamId=${selectedTeamId}, date=${reportDate}`)
     setLoading(true)
     setError(null)
     setSuccess(null)
@@ -199,20 +167,17 @@ function Dashboard() {
         })
 
       if (performances.length === 0) {
-        console.warn('[Dashboard] handleManualSave: No performances to save')
         setError('Por favor ingresa al menos un dato')
         setLoading(false)
         return
       }
 
-      console.log(`[Dashboard] handleManualSave: Sending ${performances.length} performances to API`, performances)
       const url = `${API_BASE_URL}/api/performances/bulk`
       const response = await axios.post(
         url,
         { performances },
         { headers: { 'Content-Type': 'application/json' } }
       )
-      console.log(`[Dashboard] handleManualSave: Success - ${response.data.length} records processed`, response.data)
 
       setProcessedData(response.data)
       setSuccess(`Datos guardados exitosamente. ${response.data.length} registros procesados.`)
@@ -233,27 +198,17 @@ function Dashboard() {
 
       // Refresh metrics
       setTimeout(() => {
-        console.log('[Dashboard] handleManualSave: Refreshing metrics')
         fetchHistoricalMetrics()
       }, 500)
     } catch (err) {
-      console.error('[Dashboard] handleManualSave: Error saving data', {
-        error: err,
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        performances
-      })
       setError(err.response?.data?.detail || err.message || 'Error al guardar los datos')
     } finally {
       setLoading(false)
-      console.log('[Dashboard] handleManualSave: Finished')
     }
   }
 
   // Memoized function to fetch historical metrics
   const fetchHistoricalMetrics = useCallback(async () => {
-    console.log('[Dashboard] fetchHistoricalMetrics: Starting to fetch metrics')
     setLoadingMetrics(true)
     try {
       const url = `${API_BASE_URL}/api/metrics/`
@@ -264,9 +219,7 @@ function Dashboard() {
         ...(historyStartDate && { start_date: historyStartDate }),
         ...(historyEndDate && { end_date: historyEndDate })
       }
-      console.log(`[Dashboard] fetchHistoricalMetrics: API call - URL: ${url}`, params)
       const response = await axios.get(url, { params })
-      console.log(`[Dashboard] fetchHistoricalMetrics: Success - received ${response.data.length} metrics`)
 
       let metrics = response.data
 
@@ -279,16 +232,10 @@ function Dashboard() {
 
       setHistoricalMetrics(metrics)
     } catch (err) {
-      console.error('[Dashboard] fetchHistoricalMetrics: Error fetching metrics', {
-        error: err,
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status
-      })
       // Don't show error to user, just log it
+      console.error(err)
     } finally {
       setLoadingMetrics(false)
-      console.log('[Dashboard] fetchHistoricalMetrics: Finished')
     }
   }, [selectedTeamId, historyStartDate, historyEndDate, historyAgentFilter])
 
@@ -309,214 +256,222 @@ function Dashboard() {
   }, [success, processedData.length, fetchHistoricalMetrics])
 
   return (
-    <div className="space-y-6">
-      {/* Step 1: Configuration */}
-      <div className="card p-6">
-        <div className="mb-4">
-          <h2 className="text-2xl font-semibold text-white mb-2 flex items-center gap-2">
-            <Calendar className="w-6 h-6" />
-            Configuración del Día
-          </h2>
-          <p className="text-gray-400 text-sm">
-            Define la fecha y metas globales para el reporte
-          </p>
+    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6">
+
+      {/* SECTION 1: REPORT CONTEXT (Priority A) */}
+      <div className="card p-0 overflow-hidden border-2 border-primary-900/30">
+        {/* Context Header */}
+        <div className="bg-dark-800/50 p-4 border-b border-dark-700 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary-900/20 rounded-lg text-primary-400">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white uppercase tracking-wide">Contexto del Reporte</h2>
+              <p className="text-xs text-gray-400 font-medium">Define alcance y reglas globales</p>
+            </div>
+          </div>
+          {/* Visual Indicator of Scope */}
+          {selectedTeamId && (
+            <div className="hidden md:flex items-center gap-4 text-sm text-gray-400 bg-dark-900/50 px-3 py-1.5 rounded-full border border-dark-700">
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-primary-500"></span>
+                Equipo: <span className="text-white font-medium">{teams.find(t => t.id === selectedTeamId)?.name}</span>
+              </span>
+              <span className="w-px h-4 bg-dark-600"></span>
+              <span>Fecha: <span className="text-white font-medium">{reportDate}</span></span>
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Fecha del Reporte *
-            </label>
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-col gap-2">
+        {/* Context Controls */}
+        <div className="p-6 grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
+
+          {/* Primary Inputs: Team & Date */}
+          <div className="md:col-span-5 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  <Users className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+                  Equipo Activo
+                </label>
+                {loadingTeams ? (
+                  <div className="h-10 w-full bg-dark-700 animate-pulse rounded-lg" />
+                ) : (
+                  <select
+                    value={selectedTeamId || ''}
+                    onChange={(e) => setSelectedTeamId(parseInt(e.target.value))}
+                    className="input-field w-full font-medium"
+                  >
+                    {teams.length === 0 && <option value="">Sin equipos...</option>}
+                    {teams.map(team => (
+                      <option key={team.id} value={team.id}>{team.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  Fecha
+                </label>
                 <input
                   type="date"
                   value={reportDate}
                   onChange={(e) => setReportDate(e.target.value)}
-                  className="input-field"
+                  className="input-field w-full font-medium"
                   required
                 />
               </div>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-              <Target className="w-4 h-4" />
-              Meta de Tickets Global
-            </label>
-            <input
-              type="number"
-              value={globalTicketsGoal}
-              onChange={(e) => setGlobalTicketsGoal(parseInt(e.target.value) || 0)}
-              className="input-field"
-              min="0"
-              placeholder="200"
-            />
+          <div className="hidden md:block md:col-span-1 flex justify-center pb-3">
+            <div className="h-8 w-px bg-dark-700"></div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-              <Target className="w-4 h-4" />
-              Meta Squadlinx Global
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              value={globalPointsGoal}
-              onChange={(e) => setGlobalPointsGoal(parseFloat(e.target.value) || 0)}
-              className="input-field"
-              min="0"
-              placeholder="8.0"
-            />
+          {/* Secondary Inputs: Global Goals */}
+          <div className="md:col-span-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5" />
+                  Meta Tickets (Global)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={globalTicketsGoal}
+                    onChange={(e) => setGlobalTicketsGoal(parseInt(e.target.value) || 0)}
+                    className="input-field w-full pl-3 pr-10"
+                    min="0"
+                    placeholder="e.g. 200"
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-gray-600 font-mono">TKT</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5" />
+                  Meta Squadlinx (Global)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={globalPointsGoal}
+                    onChange={(e) => setGlobalPointsGoal(parseFloat(e.target.value) || 0)}
+                    className="input-field w-full pl-3 pr-10"
+                    min="0"
+                    placeholder="e.g. 8.0"
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-gray-600 font-mono">PTS</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* Team Selector */}
-        {loadingTeams ? (
-          <div className="mt-4 flex items-center gap-2 text-gray-400">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            Cargando equipos...
-          </div>
-        ) : teams.length > 0 ? (
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Equipo
-            </label>
-            <select
-              value={selectedTeamId || ''}
-              onChange={(e) => setSelectedTeamId(parseInt(e.target.value))}
-              className="input-field w-full md:w-64"
-            >
-              {teams.map(team => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <div className="mt-4 p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg text-yellow-300">
-            No hay equipos disponibles. Por favor crea un equipo primero en Configuración de Equipo.
-          </div>
-        )}
       </div>
 
-      {/* Step 2: Data Entry */}
-      <div className="card p-6">
-        <div className="mb-4">
-          <h2 className="text-2xl font-semibold text-white mb-2">
-            Datos de los Agentes
-          </h2>
-          <p className="text-gray-400 text-sm">
-            Ingresa los datos de los agentes manualmente
-          </p>
+      {/* SECTION 2: DATA ENTRY (Priority B) */}
+      <div className="card p-0 overflow-hidden shadow-2xl shadow-black/40">
+        <div className="p-4 border-b border-dark-700 bg-dark-800/80 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <List className="w-5 h-5 text-primary-400" />
+            Registro de Datos
+          </h3>
+          <span className="text-xs text-gray-500 font-medium px-2 py-1 bg-dark-900 rounded border border-dark-700">
+            {agents.length} Agentes Activos
+          </span>
         </div>
 
-        {/* Manual Entry */}
-        <div className="space-y-4">
+        <div className="p-6">
+          {/* Status Messages area */}
+          {(error || success) && (
+            <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${error ? 'bg-red-900/20 text-red-300 border border-red-900/50' : 'bg-green-900/20 text-green-300 border border-green-900/50'
+              }`}>
+              {error ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+              <span className="font-medium">{error || success}</span>
+            </div>
+          )}
+
           {loadingAgents ? (
-            <div className="flex items-center justify-center py-12 text-gray-400">
-              <Loader2 className="w-6 h-6 animate-spin mr-2" />
-              Cargando agentes...
+            <div className="py-12 flex justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
             </div>
           ) : agents.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              {selectedTeamId ? (
-                <p>No hay agentes activos en este equipo.</p>
-              ) : (
-                <p>Por favor selecciona un equipo primero.</p>
-              )}
+            <div className="py-16 text-center text-gray-500">
+              {selectedTeamId ? 'Sin agentes activos.' : 'Selecciona un equipo arriba.'}
             </div>
           ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
+            <div className="space-y-6">
+              <div className="overflow-x-auto ring-1 ring-dark-700 rounded-lg">
+                <table className="w-full text-left">
                   <thead>
-                    <tr className="border-b border-dark-700">
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
-                        Agente
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
-                        Tickets Real
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
-                        Puntos Real
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
-                        Meta Tickets
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
-                        Meta Puntos
-                      </th>
+                    <tr className="bg-dark-900/50 text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-dark-700">
+                      <th className="px-4 py-3 min-w-[200px]">Agente</th>
+                      <th className="px-4 py-3 bg-dark-800/30">Tickets (Real)</th>
+                      <th className="px-4 py-3 bg-dark-800/30">Puntos (Real)</th>
+                      <th className="px-4 py-3 border-l border-dark-800">Meta TKT <span className="text-[10px] normal-case opacity-60">(Opcional)</span></th>
+                      <th className="px-4 py-3">Meta PTS <span className="text-[10px] normal-case opacity-60">(Opcional)</span></th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-dark-800">
                     {agents.map((agent) => (
-                      <tr
-                        key={agent.id}
-                        className="border-b border-dark-800 hover:bg-dark-800/50 transition-colors"
-                      >
-                        <td className="py-3 px-4 text-gray-100">
+                      <tr key={agent.id} className="hover:bg-dark-800/40 transition-colors even:bg-dark-800/20">
+                        {/* Agent Name */}
+                        <td className="px-4 py-2 font-medium text-gray-200">
                           {agent.full_name}
                         </td>
-                        <td className="py-3 px-4">
+
+                        {/* INPUTS: Actuals */}
+                        <td className="px-4 py-2 bg-dark-800/10">
                           <input
                             type="number"
                             value={manualData[agent.id]?.tickets_actual || ''}
                             onChange={(e) => handleManualDataChange(agent.id, 'tickets_actual', e.target.value)}
-                            className="input-field w-32"
+                            className="input-field w-32 font-mono text-sm border-dark-600 focus:border-primary-500"
                             min="0"
                             placeholder="0"
                           />
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="px-4 py-2 bg-dark-800/10">
                           <input
                             type="number"
                             step="0.1"
                             value={manualData[agent.id]?.points_actual || ''}
                             onChange={(e) => handleManualDataChange(agent.id, 'points_actual', e.target.value)}
-                            className="input-field w-32"
+                            className="input-field w-32 font-mono text-sm border-dark-600 focus:border-primary-500"
                             min="0"
                             placeholder="0.0"
                           />
                         </td>
-                        <td className="py-3 px-4">
-                          <input
-                            type="number"
-                            value={manualData[agent.id]?.tickets_goal !== null && manualData[agent.id]?.tickets_goal !== undefined && manualData[agent.id].tickets_goal !== ''
-                              ? manualData[agent.id].tickets_goal
-                              : ''}
-                            onChange={(e) => {
-                              const value = e.target.value === '' ? null : e.target.value
-                              handleManualDataChange(agent.id, 'tickets_goal', value)
-                            }}
-                            className="input-field w-32"
-                            min="0"
-                            placeholder={globalTicketsGoal.toString()}
-                          />
-                          {manualData[agent.id]?.tickets_goal === null || manualData[agent.id]?.tickets_goal === undefined || manualData[agent.id].tickets_goal === '' ? (
-                            <span className="ml-2 text-xs text-gray-500">(Global: {globalTicketsGoal})</span>
-                          ) : null}
+
+                        {/* INPUTS: Custom Goals (Optional) */}
+                        <td className="px-4 py-2 border-l border-dark-800">
+                          <div className="space-y-1">
+                            <input
+                              type="number"
+                              value={manualData[agent.id]?.tickets_goal ?? ''}
+                              onChange={(e) => handleManualDataChange(agent.id, 'tickets_goal', e.target.value === '' ? null : e.target.value)}
+                              className="input-field w-28 text-xs py-1.5 h-8 bg-dark-900/50 border-dark-700 text-gray-400 focus:text-white"
+                              min="0"
+                              placeholder={globalTicketsGoal.toString()}
+                            />
+                          </div>
                         </td>
-                        <td className="py-3 px-4">
-                          <input
-                            type="number"
-                            step="0.1"
-                            value={manualData[agent.id]?.points_goal !== null && manualData[agent.id]?.points_goal !== undefined && manualData[agent.id].points_goal !== ''
-                              ? manualData[agent.id].points_goal
-                              : ''}
-                            onChange={(e) => {
-                              const value = e.target.value === '' ? null : e.target.value
-                              handleManualDataChange(agent.id, 'points_goal', value)
-                            }}
-                            className="input-field w-32"
-                            min="0"
-                            placeholder={globalPointsGoal.toString()}
-                          />
-                          {manualData[agent.id]?.points_goal === null || manualData[agent.id]?.points_goal === undefined || manualData[agent.id].points_goal === '' ? (
-                            <span className="ml-2 text-xs text-gray-500">(Global: {globalPointsGoal})</span>
-                          ) : null}
+                        <td className="px-4 py-2">
+                          <div className="space-y-1">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={manualData[agent.id]?.points_goal ?? ''}
+                              onChange={(e) => handleManualDataChange(agent.id, 'points_goal', e.target.value === '' ? null : e.target.value)}
+                              className="input-field w-28 text-xs py-1.5 h-8 bg-dark-900/50 border-dark-700 text-gray-400 focus:text-white"
+                              min="0"
+                              placeholder={globalPointsGoal.toString()}
+                            />
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -524,165 +479,152 @@ function Dashboard() {
                 </table>
               </div>
 
-              <div className="flex justify-end">
+              {/* SAVE ACTION */}
+              <div className="pt-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-dark-700 mt-2">
+                <p className="text-xs text-gray-500 italic">
+                  * Si las metas opcionales se dejan vacías, se usarán los valores globales del contexto.
+                </p>
                 <button
                   onClick={handleManualSave}
                   disabled={loading}
-                  className="btn-primary flex items-center gap-2"
+                  className="btn-primary px-8 py-3 text-base flex items-center justify-center gap-2 shadow-lg shadow-primary-900/20 hover:shadow-primary-900/40 transform hover:-translate-y-0.5 transition-all"
                 >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-5 h-5" />
-                      Guardar Todo
-                    </>
-                  )}
+                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  Guardar Datos del Día
                 </button>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Status Messages */}
-      {error && (
-        <div className="flex items-center gap-2 p-4 bg-red-900/20 border border-red-800 rounded-lg text-red-300">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {success && (
-        <div className="flex items-center gap-2 p-4 bg-green-900/20 border border-green-800 rounded-lg text-green-300">
-          <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
-          <span>{success}</span>
-        </div>
-      )}
-
-      {/* Sprint Stats */}
-      <SprintStats metrics={historicalMetrics} agents={agents} />
-
-      {/* Sprint Heatmap */}
-      <div className="card p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-2xl font-semibold text-white mb-2">
-              Visualización de Sprint
-            </h2>
-            <p className="text-gray-400 text-sm">
-              Heatmap de productividad y carga de trabajo
-            </p>
-          </div>
-          <button
-            onClick={fetchHistoricalMetrics}
-            disabled={loadingMetrics}
-            className="btn-secondary flex items-center gap-2"
-          >
-            {loadingMetrics ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Cargando...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-5 h-5" />
-                Actualizar
-              </>
-            )}
-          </button>
-        </div>
-        <SprintHeatmap metrics={historicalMetrics} agentsList={agents} />
+      {/* SEPARATOR */}
+      <div className="py-8 flex items-center justify-center gap-4 opacity-50">
+        <div className="h-px bg-gradient-to-r from-transparent via-dark-600 to-transparent flex-1" />
+        <span className="text-xs font-bold text-gray-600 uppercase tracking-widest flex items-center gap-2">
+          <ArrowDown className="w-3 h-3" />
+          Analíticas y Resultados
+          <ArrowDown className="w-3 h-3" />
+        </span>
+        <div className="h-px bg-gradient-to-r from-transparent via-dark-600 to-transparent flex-1" />
       </div>
 
-      {/* Full History View */}
-      <div className="card p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <History className="w-6 h-6 text-primary-400" />
-            <div>
-              <h2 className="text-2xl font-semibold text-white mb-1">
-                Historial de Registros
-              </h2>
-              <p className="text-gray-400 text-sm">
-                Consulta y gestiona todos los registros históricos
-              </p>
-            </div>
+      {/* SECTION 3: ANALYTICS (Read Only) */}
+      <div className="space-y-6 opacity-90 hover:opacity-100 transition-opacity duration-500">
+
+        {/* Sprint Stats */}
+        <div className="relative group">
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-dark-700 to-dark-800 rounded-2xl opacity-0 group-hover:opacity-100 transition duration-500 blur-sm"></div>
+          <div className="relative">
+            <SprintStats metrics={historicalMetrics} agents={agents} />
           </div>
-          <button
-            onClick={() => setShowHistory(!showHistory)}
-            className="btn-secondary flex items-center gap-2"
-          >
-            <List className="w-5 h-5" />
-            {showHistory ? 'Ocultar Historial' : 'Ver Todos los Registros'}
-          </button>
         </div>
 
-        {showHistory && (
-          <div className="animate-fade-in space-y-4">
-            {/* History Filters */}
-            <div className="p-4 bg-dark-800/50 rounded-lg border border-dark-700 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">
-                  Desde
-                </label>
-                <input
-                  type="date"
-                  value={historyStartDate}
-                  onChange={(e) => setHistoryStartDate(e.target.value)}
-                  className="input-field w-full text-sm py-1.5"
-                />
+        {/* Sprint Heatmap */}
+        <div className="card p-6 border-dark-700/50">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-dark-800 rounded-lg">
+                <BarChart3 className="w-5 h-5 text-gray-400" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">
-                  Hasta
-                </label>
-                <input
-                  type="date"
-                  value={historyEndDate}
-                  onChange={(e) => setHistoryEndDate(e.target.value)}
-                  className="input-field w-full text-sm py-1.5"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">
-                  Filtrar por Agente
-                </label>
-                <input
-                  type="text"
-                  value={historyAgentFilter}
-                  onChange={(e) => setHistoryAgentFilter(e.target.value)}
-                  placeholder="Nombre del agente..."
-                  className="input-field w-full text-sm py-1.5"
-                />
+                <h2 className="text-lg font-semibold text-white">Heatmap de Productividad</h2>
+                <p className="text-xs text-gray-400">Visión global del sprint actual</p>
               </div>
             </div>
-
-            {/* Refresh Button for Filters */}
-            <div className="flex justify-end">
-              <button
-                onClick={fetchHistoricalMetrics}
-                disabled={loadingMetrics}
-                className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1"
-              >
-                <RefreshCw className={`w-4 h-4 ${loadingMetrics ? 'animate-spin' : ''}`} />
-                Aplicar Filtros
-              </button>
-            </div>
-            {historicalMetrics.length > 0 ? (
-              <DailyTable data={historicalMetrics} onDelete={fetchHistoricalMetrics} />
-            ) : (
-              <div className="text-center py-12 text-gray-500">
-                No hay registros históricos disponibles.
-              </div>
-            )}
+            <button
+              onClick={fetchHistoricalMetrics}
+              disabled={loadingMetrics}
+              className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-dark-800 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${loadingMetrics ? 'animate-spin' : ''}`} />
+              Actualizar
+            </button>
           </div>
-        )}
-      </div>
+          <SprintHeatmap metrics={historicalMetrics} agentsList={agents} />
+        </div>
 
+        {/* Full History View */}
+        <div className="card p-6 border-dark-700/50">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-dark-800 rounded-lg">
+                <History className="w-5 h-5 text-gray-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Historial Completo</h2>
+                <p className="text-xs text-gray-400">Auditoría y gestión de registros</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="btn-secondary text-sm flex items-center gap-2"
+            >
+              <List className="w-4 h-4" />
+              {showHistory ? 'Ocultar Tabla' : 'Ver Todos los Registros'}
+            </button>
+          </div>
+
+          {showHistory && (
+            <div className="animate-fade-in space-y-4">
+              {/* History Filters */}
+              <div className="p-4 bg-dark-900/50 rounded-lg border border-dark-700 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Desde</label>
+                  <input
+                    type="date"
+                    value={historyStartDate}
+                    onChange={(e) => setHistoryStartDate(e.target.value)}
+                    className="input-field w-full text-sm py-1.5"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Hasta</label>
+                  <input
+                    type="date"
+                    value={historyEndDate}
+                    onChange={(e) => setHistoryEndDate(e.target.value)}
+                    className="input-field w-full text-sm py-1.5"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Filtrar por Agente</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={historyAgentFilter}
+                      onChange={(e) => setHistoryAgentFilter(e.target.value)}
+                      placeholder="Buscar nombre..."
+                      className="input-field w-full text-sm py-1.5"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={fetchHistoricalMetrics}
+                  disabled={loadingMetrics}
+                  className="btn-secondary text-xs"
+                >
+                  <RefreshCw className={`w-3 h-3 mr-2 ${loadingMetrics ? 'animate-spin' : ''}`} />
+                  Aplicar Filtros
+                </button>
+              </div>
+
+              {historicalMetrics.length > 0 ? (
+                <div className="mt-4">
+                  <DailyTable data={historicalMetrics} onDelete={fetchHistoricalMetrics} />
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500 border border-dashed border-dark-700 rounded-lg">
+                  No hay registros históricos disponibles.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
