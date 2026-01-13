@@ -7,7 +7,9 @@ function DailyTable({ data }) {
   const [copying, setCopying] = useState(false)
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString)
+    // dateString is "YYYY-MM-DD"
+    // Appending T12:00:00 ensures we are in the middle of the day, avoiding midnight timezone shifts
+    const date = new Date(`${dateString}T12:00:00`)
     return date.toLocaleDateString('es-ES', {
       day: '2-digit',
       month: 'short',
@@ -88,7 +90,7 @@ function DailyTable({ data }) {
     return acc
   }, {})
 
-  const sortedDates = Object.keys(groupedByDate).sort((a, b) => 
+  const sortedDates = Object.keys(groupedByDate).sort((a, b) =>
     new Date(b) - new Date(a)
   )
 
@@ -173,42 +175,39 @@ function DailyTable({ data }) {
                       const pointsGoal = item.squadlinx_goal ?? item.points_goal ?? 0
                       const agentName = item.agent_name ?? `Agente ${item.agent_id}`
                       const isBurnout = item.is_burnout ?? (pointsActual > 8.0)
-                      
+
                       const meetsGoal = ticketsActual >= ticketsGoal
-                      const rowBgColor = meetsGoal 
-                        ? 'bg-green-900/10 hover:bg-green-900/20' 
+                      const rowBgColor = meetsGoal
+                        ? 'bg-green-900/10 hover:bg-green-900/20'
                         : 'bg-red-900/10 hover:bg-red-900/20'
-                      
+
                       return (
-                        <tr 
-                          key={item.id} 
+                        <tr
+                          key={item.id}
                           className={`${rowBgColor} transition-colors duration-150`}
                         >
                           <td className="px-4 py-3 text-sm font-medium text-gray-200">
                             {agentName}
                           </td>
-                          <td className={`px-4 py-3 text-sm text-center font-medium ${
-                            meetsGoal ? 'text-green-300' : 'text-red-300'
-                          }`}>
+                          <td className={`px-4 py-3 text-sm text-center font-medium ${meetsGoal ? 'text-green-300' : 'text-red-300'
+                            }`}>
                             {ticketsActual}
                           </td>
                           <td className="px-4 py-3 text-sm text-center text-gray-300">
                             {ticketsGoal}
                           </td>
-                          <td className={`px-4 py-3 text-sm text-center font-semibold ${
-                            isBurnout ? 'text-red-500' : 'text-gray-300'
-                          }`}>
+                          <td className={`px-4 py-3 text-sm text-center font-semibold ${isBurnout ? 'text-red-500' : 'text-gray-300'
+                            }`}>
                             {typeof pointsActual === 'number' ? pointsActual.toFixed(1) : '0.0'}
                           </td>
                           <td className="px-4 py-3 text-sm text-center text-gray-300">
                             {typeof pointsGoal === 'number' ? pointsGoal.toFixed(1) : '0.0'}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              meetsGoal 
-                                ? 'bg-green-900/30 text-green-300 border border-green-800' 
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${meetsGoal
+                                ? 'bg-green-900/30 text-green-300 border border-green-800'
                                 : 'bg-red-900/30 text-red-300 border border-red-800'
-                            }`}>
+                              }`}>
                               {meetsGoal ? '✓ Meta alcanzada' : '✗ Meta no alcanzada'}
                             </span>
                           </td>
