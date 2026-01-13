@@ -27,11 +27,108 @@ function TeamSettings() {
     is_active: true
   })
 
-  // ... (fetchTeams, fetchAgents unchanged)
+  // Fetch teams
+  const fetchTeams = async () => {
+    setLoadingTeams(true)
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/teams/`)
+      setTeams(response.data)
+    } catch (err) {
+      console.error('Error fetching teams:', err)
+      setError('Error al cargar los equipos')
+    } finally {
+      setLoadingTeams(false)
+    }
+  }
 
-  // ... (handleFormChange unchanged)
+  // Fetch agents
+  const fetchAgents = async (teamId) => {
+    if (!teamId) return
+    setLoading(true)
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/agents/?team_id=${teamId}`)
+      setAgents(response.data)
+    } catch (err) {
+      console.error('Error fetching agents:', err)
+      setError('Error al cargar los agentes')
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  // ... (handleTeamFormChange through handleCreateTeam unchanged)
+  // Initial load
+  useEffect(() => {
+    fetchTeams()
+  }, [])
+
+  // Load agents when team changes
+  useEffect(() => {
+    if (selectedTeamId) {
+      fetchAgents(selectedTeamId)
+    } else {
+      setAgents([])
+    }
+  }, [selectedTeamId])
+
+  // Handle form changes
+  const handleFormChange = (e) => {
+    const { name, value, type, checked } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }))
+  }
+
+  const handleTeamFormChange = (e) => {
+    const { name, value } = e.target
+    setTeamFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
+  // Create team
+  const handleCreateTeam = async (e) => {
+    e.preventDefault()
+    if (!teamFormData.name.trim()) return
+
+    setLoading(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/teams/`, {
+        name: teamFormData.name.trim()
+      })
+      setSuccess('Equipo creado exitosamente')
+      setTeamFormData({ name: '' })
+      setIsAddTeamModalOpen(false)
+      fetchTeams()
+      // Automatically select the new team
+      if (response.data && response.data.id) {
+        setSelectedTeamId(response.data.id)
+      }
+    } catch (err) {
+      console.error('Error creating team:', err)
+      setError(err.response?.data?.detail || 'Error al crear el equipo')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleOpenAddTeamModal = () => {
+    setTeamFormData({ name: '' })
+    setError(null)
+    setSuccess(null)
+    setIsAddTeamModalOpen(true)
+  }
+
+  const handleCloseTeamModal = () => {
+    setIsAddTeamModalOpen(false)
+    setTeamFormData({ name: '' })
+    setError(null)
+    setSuccess(null)
+  }
 
   // Open add modal
   const handleOpenAddModal = () => {
