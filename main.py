@@ -53,6 +53,12 @@ app.include_router(metrics.router)
 @app.on_event("startup")
 async def startup_event():
     """Initialize database tables on startup."""
+    import os
+    # Skip database initialization during tests
+    if os.getenv("TESTING") == "1":
+        logger.info("Skipping database initialization (TESTING mode)")
+        return
+    
     logger.info("Starting Support Tracker API")
     logger.info("Initializing database...")
     try:
