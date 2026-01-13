@@ -31,7 +31,7 @@ function TeamSettings() {
   const fetchTeams = async () => {
     setLoadingTeams(true)
     try {
-      const url = `${API_BASE_URL}/api/teams`
+      const url = `${API_BASE_URL}/api/teams/`
       console.log('[TeamSettings] Fetching teams from:', url)
       const response = await axios.get(url)
       console.log('[TeamSettings] Teams fetched:', response.data)
@@ -55,7 +55,7 @@ function TeamSettings() {
     
     setLoading(true)
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/agents`, {
+      const response = await axios.get(`${API_BASE_URL}/api/agents/`, {
         params: { team_id: teamId }
       })
       setAgents(response.data)
@@ -127,7 +127,7 @@ function TeamSettings() {
 
     try {
       // Ensure URL doesn't have trailing slash to avoid redirects
-      const url = `${API_BASE_URL}/api/teams`.replace(/\/$/, '')
+      const url = `${API_BASE_URL}/api/teams/`
       const payload = { name: teamFormData.name.trim() }
       console.log('[TeamSettings] Creating team:', { url, payload, API_BASE_URL })
       
@@ -233,7 +233,7 @@ function TeamSettings() {
     setSuccess(null)
 
     try {
-      await axios.post(`${API_BASE_URL}/api/agents`, {
+      await axios.post(`${API_BASE_URL}/api/agents/`, {
         team_id: selectedTeamId,
         full_name: formData.full_name.trim(),
         excel_alias: formData.excel_alias.trim().toUpperCase(),

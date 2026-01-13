@@ -15,18 +15,18 @@ function Dashboard() {
   })
   const [globalTicketsGoal, setGlobalTicketsGoal] = useState(200)
   const [globalPointsGoal, setGlobalPointsGoal] = useState(8.0)
-  
+
   const [processedData, setProcessedData] = useState([])
   const [historicalMetrics, setHistoricalMetrics] = useState([])
-  
+
   // Teams and Agents
   const [teams, setTeams] = useState([])
   const [selectedTeamId, setSelectedTeamId] = useState(null)
   const [agents, setAgents] = useState([])
-  
+
   // Manual entry data
   const [manualData, setManualData] = useState({}) // { agentId: { tickets_actual: 0, points_actual: 0, tickets_goal: null, points_goal: null } }
-  
+
   // Loading and error states
   const [loading, setLoading] = useState(false)
   const [loadingTeams, setLoadingTeams] = useState(false)
@@ -41,8 +41,8 @@ function Dashboard() {
     setLoadingTeams(true)
     setError(null) // Clear any previous errors
     try {
-      console.log(`[Dashboard] fetchTeams: API URL: ${API_BASE_URL}/api/teams`)
-      const response = await axios.get(`${API_BASE_URL}/api/teams`)
+      console.log(`[Dashboard] fetchTeams: API URL: ${API_BASE_URL}/api/teams/`)
+      const response = await axios.get(`${API_BASE_URL}/api/teams/`)
       console.log(`[Dashboard] fetchTeams: Success - received ${response.data.length} teams`, response.data)
       setTeams(response.data)
       if (response.data.length > 0 && !selectedTeamId) {
@@ -73,18 +73,18 @@ function Dashboard() {
       console.log('[Dashboard] fetchAgents: No teamId provided, skipping')
       return
     }
-    
+
     console.log(`[Dashboard] fetchAgents: Starting to fetch agents for teamId: ${teamId}`)
     setLoadingAgents(true)
     setError(null) // Clear any previous errors
     try {
-      const url = `${API_BASE_URL}/api/agents`
+      const url = `${API_BASE_URL}/api/agents/`
       const params = { team_id: teamId, is_active: true }
       console.log(`[Dashboard] fetchAgents: API call - URL: ${url}`, params)
       const response = await axios.get(url, { params })
       console.log(`[Dashboard] fetchAgents: Success - received ${response.data.length} agents`, response.data)
       setAgents(response.data)
-      
+
       // Initialize manual data
       const initialData = {}
       response.data.forEach(agent => {
@@ -197,19 +197,19 @@ function Dashboard() {
 
       setProcessedData(response.data)
       setSuccess(`Datos guardados exitosamente. ${response.data.length} registros procesados.`)
-      
+
       // Clear manual data
       const clearedData = {}
       agents.forEach(agent => {
-        clearedData[agent.id] = { 
-          tickets_actual: '', 
+        clearedData[agent.id] = {
+          tickets_actual: '',
           points_actual: '',
           tickets_goal: null,
           points_goal: null
         }
       })
       setManualData(clearedData)
-      
+
       // Refresh metrics
       setTimeout(() => {
         console.log('[Dashboard] handleManualSave: Refreshing metrics')
@@ -235,9 +235,9 @@ function Dashboard() {
     console.log('[Dashboard] fetchHistoricalMetrics: Starting to fetch metrics')
     setLoadingMetrics(true)
     try {
-      const url = `${API_BASE_URL}/api/metrics`
+      const url = `${API_BASE_URL}/api/metrics/`
       // Filter by selected team if available
-      const params = { 
+      const params = {
         limit: 1000,
         ...(selectedTeamId && { team_id: selectedTeamId })
       }
