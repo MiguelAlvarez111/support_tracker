@@ -15,7 +15,8 @@ function SprintHeatmap({ metrics = [], agentsList = [] }) {
     startDate.setDate(startDate.getDate() - daysRange + 1)
 
     const filteredMetrics = metrics.filter(metric => {
-      const metricDate = new Date(metric.date)
+      // Use T12:00:00 for consistency in comparison
+      const metricDate = new Date(`${metric.date}T12:00:00`)
       metricDate.setHours(0, 0, 0, 0)
       return metricDate >= startDate && metricDate <= today
     })
@@ -49,7 +50,8 @@ function SprintHeatmap({ metrics = [], agentsList = [] }) {
   }, [metrics, daysRange])
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString)
+    // Append T12:00:00 to prevent timezone shift (UTC midnight -> previous day)
+    const date = new Date(`${dateString}T12:00:00`)
     return date.toLocaleDateString('es-ES', {
       day: '2-digit',
       month: 'short'
@@ -57,7 +59,7 @@ function SprintHeatmap({ metrics = [], agentsList = [] }) {
   }
 
   const formatDateFull = (dateString) => {
-    const date = new Date(dateString)
+    const date = new Date(`${dateString}T12:00:00`)
     return date.toLocaleDateString('es-ES', {
       day: '2-digit',
       month: 'short',

@@ -254,25 +254,37 @@ def process_file_csv(file_path):
                     tickets_processed = int(tp_str) if tp_str and tp_str.isdigit() else 0
                     tickets_goal = int(ma_str) if ma_str and ma_str.isdigit() else 0
                     
-                    # Get or Create Performance Object from Cache
+                    # Get or Create Performance Object
+                    # 1. Check Cache (for duplicate columns in same row)
                     if date_obj in current_performances:
                         perf = current_performances[date_obj]
-                        # If duplicate column, we Update (overwrite) with latest value
-                        # or sum? Usually Excel repeats are valid or errors. Overwrite is safer.
                         if tickets_processed > 0 or tickets_goal > 0:
                              perf.tickets_actual = tickets_processed
                              perf.tickets_goal = tickets_goal
                     else:
-                        # Create New
-                        perf = DailyPerformance(
+                        # 2. Check Database (for duplicate rows in file or existing data)
+                        perf = db.query(DailyPerformance).filter_by(
                             agent_id=agent_id,
-                            date=date_obj,
-                            tickets_actual=tickets_processed,
-                            tickets_goal=tickets_goal,
-                            points_actual=0.0,
-                            points_goal=0.0
-                        )
-                        db.add(perf)
+                            date=date_obj
+                        ).first()
+                        
+                        if perf:
+                            if tickets_processed > 0 or tickets_goal > 0:
+                                perf.tickets_actual = tickets_processed
+                                perf.tickets_goal = tickets_goal
+                        else:
+                            # 3. Create New
+                            perf = DailyPerformance(
+                                agent_id=agent_id,
+                                date=date_obj,
+                                tickets_actual=tickets_processed,
+                                tickets_goal=tickets_goal,
+                                points_actual=0.0,
+                                points_goal=0.0
+                            )
+                            db.add(perf)
+                        
+                        # Add to cache for subsequent columns in this row
                         current_performances[date_obj] = perf
                         processed_count += 1
                         
