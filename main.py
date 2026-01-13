@@ -5,24 +5,21 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import date
 
 from database import get_db, init_db
-from models import DailyMetric
+from models import Team, Agent, DailyPerformance
 from schemas import (
-    DailyMetricCreate,
-    DailyMetricUpdate,
-    DailyMetricResponse,
-    DailyMetricBulkCreate,
+    DailyPerformanceResponse,
     RawDataUpload
 )
-from services.parser import parse_raw_text, upsert_metrics
+from services.parser import parse_raw_text
+from routers import teams, agents, performances
 
 # Initialize FastAPI app
 app = FastAPI(
     title="Support Tracker API",
     description="API para seguimiento de tickets de soporte y métricas diarias",
-    version="1.0.0"
+    version="2.0.0"
 )
 
 # CORS middleware
@@ -33,6 +30,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(teams.router)
+app.include_router(agents.router)
+app.include_router(performances.router)
 
 
 @app.on_event("startup")
@@ -46,7 +48,7 @@ async def root():
     """Root endpoint."""
     return {
         "message": "Support Tracker API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "status": "running"
     }
 
@@ -58,200 +60,8 @@ async def health_check():
 
 
 @app.post(
-    "/api/metrics",
-    response_model=DailyMetricResponse,
-    status_code=status.HTTP_201_CREATED,
-    tags=["Metrics"]
-)
-async def create_metric(
-    metric: DailyMetricCreate,
-    db: Session = Depends(get_db)
-):
-    """
-    Create a new daily metric.
-    
-    The is_burnout field will be automatically calculated based on:
-    squadlinx_points > squadlinx_goal + 0.5
-    """
-    # Create new metric
-    db_metric = DailyMetric(**metric.model_dump())
-    
-    # Calculate burnout status
-    db_metric.calculate_burnout()
-    
-    db.add(db_metric)
-    db.commit()
-    db.refresh(db_metric)
-    
-    return db_metric
-
-
-@app.post(
-    "/api/metrics/bulk",
-    response_model=List[DailyMetricResponse],
-    status_code=status.HTTP_201_CREATED,
-    tags=["Metrics"]
-)
-async def create_metrics_bulk(
-    bulk_data: DailyMetricBulkCreate,
-    db: Session = Depends(get_db)
-):
-    """
-    Create multiple daily metrics in bulk.
-    
-    Useful for loading large datasets at once.
-    """
-    db_metrics = []
-    
-    for metric_data in bulk_data.metrics:
-        db_metric = DailyMetric(**metric_data.model_dump())
-        db_metric.calculate_burnout()
-        db_metrics.append(db_metric)
-    
-    db.add_all(db_metrics)
-    db.commit()
-    
-    # Refresh all metrics
-    for db_metric in db_metrics:
-        db.refresh(db_metric)
-    
-    return db_metrics
-
-
-@app.get(
-    "/api/metrics",
-    response_model=List[DailyMetricResponse],
-    tags=["Metrics"]
-)
-async def get_metrics(
-    skip: int = 0,
-    limit: int = 100,
-    agent_name: str = None,
-    start_date: date = None,
-    end_date: date = None,
-    is_burnout: bool = None,
-    db: Session = Depends(get_db)
-):
-    """
-    Get all daily metrics with optional filters.
-    
-    - **skip**: Number of records to skip (for pagination)
-    - **limit**: Maximum number of records to return
-    - **agent_name**: Filter by agent name
-    - **start_date**: Filter metrics from this date onwards
-    - **end_date**: Filter metrics up to this date
-    - **is_burnout**: Filter by burnout status
-    """
-    query = db.query(DailyMetric)
-    
-    if agent_name:
-        query = query.filter(DailyMetric.agent_name == agent_name.upper())
-    
-    if start_date:
-        query = query.filter(DailyMetric.date >= start_date)
-    
-    if end_date:
-        query = query.filter(DailyMetric.date <= end_date)
-    
-    if is_burnout is not None:
-        query = query.filter(DailyMetric.is_burnout == is_burnout)
-    
-    metrics = query.order_by(DailyMetric.date.desc()).offset(skip).limit(limit).all()
-    
-    return metrics
-
-
-@app.get(
-    "/api/metrics/{metric_id}",
-    response_model=DailyMetricResponse,
-    tags=["Metrics"]
-)
-async def get_metric(
-    metric_id: int,
-    db: Session = Depends(get_db)
-):
-    """Get a specific metric by ID."""
-    metric = db.query(DailyMetric).filter(DailyMetric.id == metric_id).first()
-    
-    if not metric:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Metric with id {metric_id} not found"
-        )
-    
-    return metric
-
-
-@app.put(
-    "/api/metrics/{metric_id}",
-    response_model=DailyMetricResponse,
-    tags=["Metrics"]
-)
-async def update_metric(
-    metric_id: int,
-    metric_update: DailyMetricUpdate,
-    db: Session = Depends(get_db)
-):
-    """
-    Update an existing metric.
-    
-    Only provided fields will be updated.
-    The is_burnout field will be recalculated if squadlinx_points or squadlinx_goal are updated.
-    """
-    db_metric = db.query(DailyMetric).filter(DailyMetric.id == metric_id).first()
-    
-    if not db_metric:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Metric with id {metric_id} not found"
-        )
-    
-    # Update only provided fields
-    update_data = metric_update.model_dump(exclude_unset=True)
-    
-    # Check if points or goal are being updated (need to recalculate burnout)
-    needs_recalc = 'squadlinx_points' in update_data or 'squadlinx_goal' in update_data
-    
-    for key, value in update_data.items():
-        setattr(db_metric, key, value)
-    
-    # Recalculate burnout if needed
-    if needs_recalc:
-        db_metric.calculate_burnout()
-    
-    db.commit()
-    db.refresh(db_metric)
-    
-    return db_metric
-
-
-@app.delete(
-    "/api/metrics/{metric_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    tags=["Metrics"]
-)
-async def delete_metric(
-    metric_id: int,
-    db: Session = Depends(get_db)
-):
-    """Delete a metric by ID."""
-    db_metric = db.query(DailyMetric).filter(DailyMetric.id == metric_id).first()
-    
-    if not db_metric:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Metric with id {metric_id} not found"
-        )
-    
-    db.delete(db_metric)
-    db.commit()
-    
-    return None
-
-
-@app.post(
     "/upload-raw-data",
-    response_model=List[DailyMetricResponse],
+    response_model=List[DailyPerformanceResponse],
     status_code=status.HTTP_200_OK,
     tags=["Upload"]
 )
@@ -260,7 +70,7 @@ async def upload_raw_data(
     db: Session = Depends(get_db)
 ):
     """
-    Upload raw text data copied from Excel and parse it into DailyMetric records.
+    Upload raw text data copied from Excel and parse it into DailyPerformance records.
     
     Expected format:
     WIEDER 1 ene. 2 ene.
@@ -269,31 +79,121 @@ async def upload_raw_data(
     J. ROMERO 0 0 0 200 200 0
     
     The endpoint will:
-    - Parse the raw text to extract agent names, dates, tickets_processed, and ticket_goal
-    - For each (agent_name, date) combination, update if exists, create if new (upsert)
-    - Return all processed metrics
+    - Require a team_id
+    - Parse the raw text to extract agent excel_aliases, dates, tickets_actual, and tickets_goal
+    - Lookup agents by excel_alias within the specified team
+    - If any agents are not found, return an error with the list of missing excel_aliases
+    - For each (agent_id, date) combination, update if exists, create if new (upsert)
+    - Return all processed performance records
     
-    Note: squadlinx_points and squadlinx_goal are set to default values (0.0 and 8.0)
+    Note: points_actual and points_goal are set to default values (0.0 and 8.0)
     as they are not present in the raw data format.
     """
     try:
-        # Parse raw text into DailyMetricCreate objects
-        metrics = parse_raw_text(
+        # Verify team exists
+        team = db.query(Team).filter(Team.id == upload_data.team_id).first()
+        if not team:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Team with id {upload_data.team_id} not found"
+            )
+        
+        # Parse raw text into ParsedPerformance objects
+        parsed_performances = parse_raw_text(
             raw_text=upload_data.raw_data,
             base_year=upload_data.base_year
         )
         
-        if not metrics:
+        if not parsed_performances:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No valid metrics could be parsed from the raw data"
+                detail="No valid performance data could be parsed from the raw data"
             )
         
-        # Upsert metrics (update if exists, create if new)
-        result_metrics = upsert_metrics(metrics, db)
+        # Collect unique excel_aliases from parsed data
+        unique_excel_aliases = set(perf.excel_alias for perf in parsed_performances)
         
-        return result_metrics
+        # Lookup all agents by excel_alias in the specified team
+        agents_by_alias = {
+            agent.excel_alias: agent
+            for agent in db.query(Agent).filter(
+                Agent.team_id == upload_data.team_id,
+                Agent.excel_alias.in_(unique_excel_aliases)
+            ).all()
+        }
+        
+        # Check for missing agents
+        missing_aliases = unique_excel_aliases - set(agents_by_alias.keys())
+        if missing_aliases:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"The following agents were not found in team {team.name} (team_id: {upload_data.team_id}): {', '.join(sorted(missing_aliases))}. Please create these agents first."
+            )
+        
+        # Apply global date and goals if provided
+        # Group performances by agent_id and date for upsert
+        performances_by_key = {}
+        for perf in parsed_performances:
+            agent = agents_by_alias[perf.excel_alias]
+            # Use provided date or parsed date
+            perf_date = upload_data.date if upload_data.date else perf.date
+            # Use global goals if provided, otherwise use parsed values
+            perf_tickets_goal = upload_data.tickets_goal if upload_data.tickets_goal is not None else perf.tickets_goal
+            perf_points_goal = upload_data.points_goal if upload_data.points_goal is not None else perf.points_goal
+            
+            key = (agent.id, perf_date)
+            if key not in performances_by_key:
+                # Create a new performance with updated values
+                performances_by_key[key] = {
+                    'agent_id': agent.id,
+                    'date': perf_date,
+                    'tickets_actual': perf.tickets_actual,
+                    'tickets_goal': perf_tickets_goal,
+                    'points_actual': perf.points_actual,
+                    'points_goal': perf_points_goal
+                }
+        
+        # Upsert performances (update if exists, create if new)
+        result_performances = []
+        for key, perf_data in performances_by_key.items():
+            agent_id, perf_date = key
+            
+            # Check if performance exists
+            existing_perf = db.query(DailyPerformance).filter(
+                DailyPerformance.agent_id == agent_id,
+                DailyPerformance.date == perf_date
+            ).first()
+            
+            if existing_perf:
+                # Update existing performance
+                existing_perf.tickets_actual = perf_data['tickets_actual']
+                existing_perf.tickets_goal = perf_data['tickets_goal']
+                existing_perf.points_actual = perf_data['points_actual']
+                existing_perf.points_goal = perf_data['points_goal']
+                result_performances.append(existing_perf)
+            else:
+                # Create new performance
+                new_perf = DailyPerformance(
+                    agent_id=agent_id,
+                    date=perf_date,
+                    tickets_actual=perf_data['tickets_actual'],
+                    tickets_goal=perf_data['tickets_goal'],
+                    points_actual=perf_data['points_actual'],
+                    points_goal=perf_data['points_goal']
+                )
+                db.add(new_perf)
+                result_performances.append(new_perf)
+        
+        db.commit()
+        
+        # Refresh all performances to get IDs
+        for perf in result_performances:
+            db.refresh(perf)
+        
+        return result_performances
     
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -305,4 +205,3 @@ async def upload_raw_data(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing data: {str(e)}"
         )
-
