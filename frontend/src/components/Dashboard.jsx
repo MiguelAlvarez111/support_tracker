@@ -3,6 +3,7 @@ import { Loader2, AlertCircle, CheckCircle2, RefreshCw, Save, Calendar, Target }
 import axios from 'axios'
 import DailyTable from './DailyTable'
 import SprintHeatmap from './SprintHeatmap'
+import SprintStats from './SprintStats'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -24,7 +25,7 @@ function Dashboard() {
   const [agents, setAgents] = useState([])
   
   // Manual entry data
-  const [manualData, setManualData] = useState({}) // { agentId: { tickets_actual: 0, points_actual: 0 } }
+  const [manualData, setManualData] = useState({}) // { agentId: { tickets_actual: 0, points_actual: 0, tickets_goal: null, points_goal: null } }
   
   // Loading and error states
   const [loading, setLoading] = useState(false)
@@ -36,35 +37,52 @@ function Dashboard() {
 
   // Fetch teams
   const fetchTeams = async () => {
+    console.log('[Dashboard] fetchTeams: Starting to fetch teams')
     setLoadingTeams(true)
     setError(null) // Clear any previous errors
     try {
+      console.log(`[Dashboard] fetchTeams: API URL: ${API_BASE_URL}/api/teams`)
       const response = await axios.get(`${API_BASE_URL}/api/teams`)
+      console.log(`[Dashboard] fetchTeams: Success - received ${response.data.length} teams`, response.data)
       setTeams(response.data)
       if (response.data.length > 0 && !selectedTeamId) {
+        console.log(`[Dashboard] fetchTeams: Setting default team: ${response.data[0].id}`)
         setSelectedTeamId(response.data[0].id)
       }
     } catch (err) {
-      console.error('Error fetching teams:', err)
+      console.error('[Dashboard] fetchTeams: Error fetching teams', {
+        error: err,
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        url: `${API_BASE_URL}/api/teams`
+      })
       // Only show error if it's a real error, not just no teams
       if (err.response?.status !== 404) {
         setError('Error al cargar los equipos')
       }
     } finally {
       setLoadingTeams(false)
+      console.log('[Dashboard] fetchTeams: Finished')
     }
   }
 
   // Fetch active agents for selected team
   const fetchAgents = async (teamId) => {
-    if (!teamId) return
+    if (!teamId) {
+      console.log('[Dashboard] fetchAgents: No teamId provided, skipping')
+      return
+    }
     
+    console.log(`[Dashboard] fetchAgents: Starting to fetch agents for teamId: ${teamId}`)
     setLoadingAgents(true)
     setError(null) // Clear any previous errors
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/agents`, {
-        params: { team_id: teamId, is_active: true }
-      })
+      const url = `${API_BASE_URL}/api/agents`
+      const params = { team_id: teamId, is_active: true }
+      console.log(`[Dashboard] fetchAgents: API call - URL: ${url}`, params)
+      const response = await axios.get(url, { params })
+      console.log(`[Dashboard] fetchAgents: Success - received ${response.data.length} agents`, response.data)
       setAgents(response.data)
       
       // Initialize manual data
@@ -72,15 +90,25 @@ function Dashboard() {
       response.data.forEach(agent => {
         initialData[agent.id] = {
           tickets_actual: '',
-          points_actual: ''
+          points_actual: '',
+          tickets_goal: null, // null means use global value
+          points_goal: null // null means use global value
         }
       })
       setManualData(initialData)
+      console.log(`[Dashboard] fetchAgents: Initialized manual data for ${Object.keys(initialData).length} agents`)
     } catch (err) {
-      console.error('Error fetching agents:', err)
+      console.error('[Dashboard] fetchAgents: Error fetching agents', {
+        error: err,
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        teamId
+      })
       setError('Error al cargar los agentes')
     } finally {
       setLoadingAgents(false)
+      console.log('[Dashboard] fetchAgents: Finished')
     }
   }
 
@@ -107,16 +135,20 @@ function Dashboard() {
 
   // Handle manual save
   const handleManualSave = async () => {
+    console.log('[Dashboard] handleManualSave: Starting save operation')
     if (!selectedTeamId) {
+      console.warn('[Dashboard] handleManualSave: No team selected')
       setError('Por favor selecciona un equipo')
       return
     }
 
     if (!reportDate) {
+      console.warn('[Dashboard] handleManualSave: No report date selected')
       setError('Por favor selecciona una fecha')
       return
     }
 
+    console.log(`[Dashboard] handleManualSave: Saving for teamId=${selectedTeamId}, date=${reportDate}`)
     setLoading(true)
     setError(null)
     setSuccess(null)
@@ -130,27 +162,38 @@ function Dashboard() {
         })
         .map(agent => {
           const data = manualData[agent.id]
+          // Use custom goal if set, otherwise use global goal
+          const tickets_goal = (data?.tickets_goal !== null && data?.tickets_goal !== undefined && data.tickets_goal !== '')
+            ? parseInt(data.tickets_goal)
+            : globalTicketsGoal
+          const points_goal = (data?.points_goal !== null && data?.points_goal !== undefined && data.points_goal !== '')
+            ? parseFloat(data.points_goal)
+            : globalPointsGoal
           return {
             agent_id: agent.id,
             date: reportDate,
             tickets_actual: parseInt(data?.tickets_actual) || 0,
-            tickets_goal: globalTicketsGoal,
+            tickets_goal: tickets_goal,
             points_actual: parseFloat(data?.points_actual) || 0.0,
-            points_goal: globalPointsGoal
+            points_goal: points_goal
           }
         })
 
       if (performances.length === 0) {
+        console.warn('[Dashboard] handleManualSave: No performances to save')
         setError('Por favor ingresa al menos un dato')
         setLoading(false)
         return
       }
 
+      console.log(`[Dashboard] handleManualSave: Sending ${performances.length} performances to API`, performances)
+      const url = `${API_BASE_URL}/api/performances/bulk`
       const response = await axios.post(
-        `${API_BASE_URL}/api/performances/bulk`,
+        url,
         { performances },
         { headers: { 'Content-Type': 'application/json' } }
       )
+      console.log(`[Dashboard] handleManualSave: Success - ${response.data.length} records processed`, response.data)
 
       setProcessedData(response.data)
       setSuccess(`Datos guardados exitosamente. ${response.data.length} registros procesados.`)
@@ -158,39 +201,56 @@ function Dashboard() {
       // Clear manual data
       const clearedData = {}
       agents.forEach(agent => {
-        clearedData[agent.id] = { tickets_actual: '', points_actual: '' }
+        clearedData[agent.id] = { 
+          tickets_actual: '', 
+          points_actual: '',
+          tickets_goal: null,
+          points_goal: null
+        }
       })
       setManualData(clearedData)
       
       // Refresh metrics
       setTimeout(() => {
+        console.log('[Dashboard] handleManualSave: Refreshing metrics')
         fetchHistoricalMetrics()
       }, 500)
     } catch (err) {
-      console.error('Error saving manual data:', err)
+      console.error('[Dashboard] handleManualSave: Error saving data', {
+        error: err,
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        performances
+      })
       setError(err.response?.data?.detail || err.message || 'Error al guardar los datos')
     } finally {
       setLoading(false)
+      console.log('[Dashboard] handleManualSave: Finished')
     }
   }
 
   const fetchHistoricalMetrics = async () => {
+    console.log('[Dashboard] fetchHistoricalMetrics: Starting to fetch metrics')
     setLoadingMetrics(true)
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/api/metrics`,
-        {
-          params: {
-            limit: 1000 // Get enough data for the heatmap
-          }
-        }
-      )
+      const url = `${API_BASE_URL}/api/metrics`
+      const params = { limit: 1000 }
+      console.log(`[Dashboard] fetchHistoricalMetrics: API call - URL: ${url}`, params)
+      const response = await axios.get(url, { params })
+      console.log(`[Dashboard] fetchHistoricalMetrics: Success - received ${response.data.length} metrics`)
       setHistoricalMetrics(response.data)
     } catch (err) {
-      console.error('Error fetching historical metrics:', err)
+      console.error('[Dashboard] fetchHistoricalMetrics: Error fetching metrics', {
+        error: err,
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      })
       // Don't show error to user, just log it
     } finally {
       setLoadingMetrics(false)
+      console.log('[Dashboard] fetchHistoricalMetrics: Finished')
     }
   }
 
@@ -342,6 +402,12 @@ function Dashboard() {
                       <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
                         Puntos Real
                       </th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
+                        Meta Tickets
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
+                        Meta Puntos
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -376,6 +442,43 @@ function Dashboard() {
                             min="0"
                             placeholder="0.0"
                           />
+                        </td>
+                        <td className="py-3 px-4">
+                          <input
+                            type="number"
+                            value={manualData[agent.id]?.tickets_goal !== null && manualData[agent.id]?.tickets_goal !== undefined && manualData[agent.id].tickets_goal !== ''
+                              ? manualData[agent.id].tickets_goal
+                              : ''}
+                            onChange={(e) => {
+                              const value = e.target.value === '' ? null : e.target.value
+                              handleManualDataChange(agent.id, 'tickets_goal', value)
+                            }}
+                            className="input-field w-32"
+                            min="0"
+                            placeholder={globalTicketsGoal.toString()}
+                          />
+                          {manualData[agent.id]?.tickets_goal === null || manualData[agent.id]?.tickets_goal === undefined || manualData[agent.id].tickets_goal === '' ? (
+                            <span className="ml-2 text-xs text-gray-500">(Global: {globalTicketsGoal})</span>
+                          ) : null}
+                        </td>
+                        <td className="py-3 px-4">
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={manualData[agent.id]?.points_goal !== null && manualData[agent.id]?.points_goal !== undefined && manualData[agent.id].points_goal !== ''
+                              ? manualData[agent.id].points_goal
+                              : ''}
+                            onChange={(e) => {
+                              const value = e.target.value === '' ? null : e.target.value
+                              handleManualDataChange(agent.id, 'points_goal', value)
+                            }}
+                            className="input-field w-32"
+                            min="0"
+                            placeholder={globalPointsGoal.toString()}
+                          />
+                          {manualData[agent.id]?.points_goal === null || manualData[agent.id]?.points_goal === undefined || manualData[agent.id].points_goal === '' ? (
+                            <span className="ml-2 text-xs text-gray-500">(Global: {globalPointsGoal})</span>
+                          ) : null}
                         </td>
                       </tr>
                     ))}
@@ -426,6 +529,9 @@ function Dashboard() {
       {processedData.length > 0 && (
         <DailyTable data={processedData} />
       )}
+
+      {/* Sprint Stats */}
+      <SprintStats metrics={historicalMetrics} />
 
       {/* Sprint Heatmap */}
       <div className="card p-6">

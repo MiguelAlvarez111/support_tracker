@@ -1,6 +1,7 @@
 """
 CRUD endpoints for DailyPerformance management.
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -9,6 +10,7 @@ from database import get_db
 from models import DailyPerformance, Agent
 from schemas import DailyPerformanceCreate, DailyPerformanceBulkCreate, DailyPerformanceResponse
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/performances", tags=["Performances"])
 
 
@@ -28,41 +30,61 @@ async def bulk_create_performances(
     If a performance with the same (agent_id, date) exists, it will be updated.
     Otherwise, a new record will be created.
     """
+    logger.info(f"Bulk create/update performances: count={len(bulk_data.performances)}")
     result_performances = []
+    created_count = 0
+    updated_count = 0
     
-    for perf_data in bulk_data.performances:
-        # Verify agent exists
-        agent = db.query(Agent).filter(Agent.id == perf_data.agent_id).first()
-        if not agent:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Agent with id {perf_data.agent_id} not found"
-            )
+    try:
+        for perf_data in bulk_data.performances:
+            # Verify agent exists
+            agent = db.query(Agent).filter(Agent.id == perf_data.agent_id).first()
+            if not agent:
+                logger.warning(f"Agent not found for performance: agent_id={perf_data.agent_id}")
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Agent with id {perf_data.agent_id} not found"
+                )
+            
+            # Check if performance exists
+            existing_perf = db.query(DailyPerformance).filter(
+                DailyPerformance.agent_id == perf_data.agent_id,
+                DailyPerformance.date == perf_data.date
+            ).first()
+            
+            if existing_perf:
+                # Update existing performance
+                logger.debug(f"Updating performance: agent_id={perf_data.agent_id}, date={perf_data.date}")
+                existing_perf.tickets_actual = perf_data.tickets_actual
+                existing_perf.tickets_goal = perf_data.tickets_goal
+                existing_perf.points_actual = perf_data.points_actual
+                existing_perf.points_goal = perf_data.points_goal
+                result_performances.append(existing_perf)
+                updated_count += 1
+            else:
+                # Create new performance
+                logger.debug(f"Creating performance: agent_id={perf_data.agent_id}, date={perf_data.date}")
+                new_perf = DailyPerformance(**perf_data.model_dump())
+                db.add(new_perf)
+                result_performances.append(new_perf)
+                created_count += 1
         
-        # Check if performance exists
-        existing_perf = db.query(DailyPerformance).filter(
-            DailyPerformance.agent_id == perf_data.agent_id,
-            DailyPerformance.date == perf_data.date
-        ).first()
+        logger.info(f"Committing {len(result_performances)} performances (created: {created_count}, updated: {updated_count})")
+        db.commit()
         
-        if existing_perf:
-            # Update existing performance
-            existing_perf.tickets_actual = perf_data.tickets_actual
-            existing_perf.tickets_goal = perf_data.tickets_goal
-            existing_perf.points_actual = perf_data.points_actual
-            existing_perf.points_goal = perf_data.points_goal
-            result_performances.append(existing_perf)
-        else:
-            # Create new performance
-            new_perf = DailyPerformance(**perf_data.model_dump())
-            db.add(new_perf)
-            result_performances.append(new_perf)
-    
-    db.commit()
-    
-    # Refresh all performances to get IDs
-    for perf in result_performances:
-        db.refresh(perf)
-    
-    return result_performances
+        # Refresh all performances to get IDs
+        for perf in result_performances:
+            db.refresh(perf)
+        
+        logger.info(f"Bulk create/update completed successfully: {len(result_performances)} records")
+        return result_performances
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in bulk_create_performances: {str(e)}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing bulk performances: {str(e)}"
+        )
 

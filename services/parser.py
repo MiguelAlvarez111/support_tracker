@@ -1,10 +1,13 @@
 """
 Service for parsing raw text data from Excel copies into structured performance records.
 """
+import logging
 import re
 from datetime import date, datetime
 from typing import List, Dict, Any
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -38,14 +41,19 @@ def parse_raw_text(raw_text: str, base_year: int = None) -> List[ParsedPerforman
     if base_year is None:
         base_year = datetime.now().year
     
+    logger.debug(f"Parsing raw text: length={len(raw_text)}, base_year={base_year}")
     lines = [line.strip() for line in raw_text.strip().split('\n') if line.strip()]
+    logger.debug(f"Parsed {len(lines)} lines from raw text")
     
     if len(lines) < 3:
+        logger.error(f"Invalid format: text must have at least 3 lines, got {len(lines)}")
         raise ValueError("Invalid format: text must have at least 3 lines")
     
     # Parse first line to extract dates
     first_line = lines[0]
+    logger.debug(f"Extracting dates from first line: {first_line}")
     dates = _extract_dates(first_line, base_year)
+    logger.info(f"Extracted {len(dates)} dates: {dates}")
     
     # Skip header lines (first two lines: dates and column headers)
     data_lines = lines[2:]
@@ -69,6 +77,7 @@ def parse_raw_text(raw_text: str, base_year: int = None) -> List[ParsedPerforman
         
         # Skip lines that look like headers
         if not excel_alias or excel_alias in ['T.', 'P', 'M.', 'A', 'D.M', 'WIEDER', 'T. P', 'M. A']:
+            logger.debug(f"Skipping header line: {excel_alias}")
             continue
         
         # Extract numeric data
@@ -107,8 +116,10 @@ def parse_raw_text(raw_text: str, base_year: int = None) -> List[ParsedPerforman
                 # Skip this day if there's an error
                 col_index += 3
                 day_index += 1
+                logger.warning(f"Error parsing day data for {excel_alias}, day_index={day_index}: {str(e)}")
                 continue
     
+    logger.info(f"Parsing completed: {len(performances)} performance records created")
     return performances
 
 

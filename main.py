@@ -1,6 +1,8 @@
 """
 FastAPI application for Support Tracker.
 """
+import logging
+import sys
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -14,6 +16,16 @@ from schemas import (
 )
 from services.parser import parse_raw_text
 from routers import teams, agents, performances
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -40,12 +52,20 @@ app.include_router(performances.router)
 @app.on_event("startup")
 async def startup_event():
     """Initialize database tables on startup."""
-    init_db()
+    logger.info("Starting Support Tracker API")
+    logger.info("Initializing database...")
+    try:
+        init_db()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing database: {str(e)}", exc_info=True)
+        raise
 
 
 @app.get("/", tags=["Health"])
 async def root():
     """Root endpoint."""
+    logger.info("Root endpoint accessed")
     return {
         "message": "Support Tracker API",
         "version": "2.0.0",
@@ -56,6 +76,7 @@ async def root():
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint."""
+    logger.debug("Health check endpoint accessed")
     return {"status": "healthy"}
 
 
@@ -89,22 +110,29 @@ async def upload_raw_data(
     Note: points_actual and points_goal are set to default values (0.0 and 8.0)
     as they are not present in the raw data format.
     """
+    logger.info(f"Upload raw data request received - team_id: {upload_data.team_id}, date: {upload_data.date}")
     try:
         # Verify team exists
+        logger.debug(f"Looking up team with id: {upload_data.team_id}")
         team = db.query(Team).filter(Team.id == upload_data.team_id).first()
         if not team:
+            logger.warning(f"Team not found: team_id={upload_data.team_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Team with id {upload_data.team_id} not found"
             )
+        logger.info(f"Team found: {team.name} (id: {team.id})")
         
         # Parse raw text into ParsedPerformance objects
+        logger.info(f"Parsing raw text data (length: {len(upload_data.raw_data)} chars, base_year: {upload_data.base_year})")
         parsed_performances = parse_raw_text(
             raw_text=upload_data.raw_data,
             base_year=upload_data.base_year
         )
+        logger.info(f"Parsed {len(parsed_performances)} performance records")
         
         if not parsed_performances:
+            logger.warning("No valid performance data parsed from raw data")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No valid performance data could be parsed from the raw data"
@@ -125,10 +153,12 @@ async def upload_raw_data(
         # Check for missing agents
         missing_aliases = unique_excel_aliases - set(agents_by_alias.keys())
         if missing_aliases:
+            logger.warning(f"Missing agents in team {team.name}: {missing_aliases}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"The following agents were not found in team {team.name} (team_id: {upload_data.team_id}): {', '.join(sorted(missing_aliases))}. Please create these agents first."
             )
+        logger.info(f"Found {len(agents_by_alias)} agents matching excel aliases")
         
         # Apply global date and goals if provided
         # Group performances by agent_id and date for upsert
@@ -154,7 +184,11 @@ async def upload_raw_data(
                 }
         
         # Upsert performances (update if exists, create if new)
+        logger.info(f"Processing {len(performances_by_key)} performance records for upsert")
         result_performances = []
+        created_count = 0
+        updated_count = 0
+        
         for key, perf_data in performances_by_key.items():
             agent_id, perf_date = key
             
@@ -166,13 +200,16 @@ async def upload_raw_data(
             
             if existing_perf:
                 # Update existing performance
+                logger.debug(f"Updating performance: agent_id={agent_id}, date={perf_date}")
                 existing_perf.tickets_actual = perf_data['tickets_actual']
                 existing_perf.tickets_goal = perf_data['tickets_goal']
                 existing_perf.points_actual = perf_data['points_actual']
                 existing_perf.points_goal = perf_data['points_goal']
                 result_performances.append(existing_perf)
+                updated_count += 1
             else:
                 # Create new performance
+                logger.debug(f"Creating new performance: agent_id={agent_id}, date={perf_date}")
                 new_perf = DailyPerformance(
                     agent_id=agent_id,
                     date=perf_date,
@@ -183,23 +220,29 @@ async def upload_raw_data(
                 )
                 db.add(new_perf)
                 result_performances.append(new_perf)
+                created_count += 1
         
+        logger.info(f"Committing {len(result_performances)} performance records (created: {created_count}, updated: {updated_count})")
         db.commit()
         
         # Refresh all performances to get IDs
         for perf in result_performances:
             db.refresh(perf)
         
+        logger.info(f"Successfully processed {len(result_performances)} performance records")
         return result_performances
     
-    except HTTPException:
+    except HTTPException as e:
+        logger.error(f"HTTPException in upload_raw_data: {e.status_code} - {e.detail}")
         raise
     except ValueError as e:
+        logger.error(f"ValueError parsing raw data: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error parsing raw data: {str(e)}"
         )
     except Exception as e:
+        logger.error(f"Unexpected error in upload_raw_data: {str(e)}", exc_info=True)
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
