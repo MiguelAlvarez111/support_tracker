@@ -174,8 +174,6 @@ def process_file_csv(file_path):
         # Map: "FULL NAME" -> Agent Object
         agent_map = {a.full_name.upper(): a for a in agents}
         
-        processed_count = 0
-        
         with open(file_path, 'r', encoding='utf-8') as f:
             reader = csv.reader(f, delimiter='\t')
             rows = list(reader)
@@ -196,15 +194,30 @@ def process_file_csv(file_path):
 
         # Map column index to date
         dates_map = {} # col_idx -> date_obj
+        unique_dates = set()
+        
         for c_idx, cell in enumerate(header_row):
             d = parse_header_date(cell)
             if d:
                 dates_map[c_idx] = d
+                unique_dates.add(d)
                 
-        print(f"Found {len(dates_map)} dates.")
+        print(f"Found {len(dates_map)} date columns ({len(unique_dates)} unique days).")
 
-        # 2. DATA PARSING
+        # 2. DATA CLEARING (Requested by User)
+        # Delete existing performance records for these dates to avoid conflicts and ensure clean state
+        # Warning: This deletes data for ALL agents for these days.
+        print("Clearing existing data for found dates...")
+        if unique_dates:
+             db.query(DailyPerformance).filter(
+                 DailyPerformance.date.in_(list(unique_dates))
+             ).delete(synchronize_session=False)
+             db.commit()
+             print("Old data cleared.")
+
+        # 3. DATA PARSING & INSERTION
         start_row = header_idx + 1
+        processed_count = 0
         
         for row in rows[start_row:]:
             line_str = "".join(row)
@@ -222,6 +235,12 @@ def process_file_csv(file_path):
                 
             print(f"Processing {raw_name} (ID: {agent_id})...")
             
+            # SESSION CACHE
+            # Maintain a map of date->DailyPerformance object for THIS transaction/agent
+            # This prevents "Duplicate Key" errors if the input has duplicate columns for "29 ene"
+            # We created new objects because we deleted everything above.
+            current_performances = {} # date_obj -> DailyPerformance instance
+            
             # Extract Data
             for col_idx, date_obj in dates_map.items():
                 try:
@@ -235,16 +254,16 @@ def process_file_csv(file_path):
                     tickets_processed = int(tp_str) if tp_str and tp_str.isdigit() else 0
                     tickets_goal = int(ma_str) if ma_str and ma_str.isdigit() else 0
                     
-                    # Upsert
-                    perf = db.query(DailyPerformance).filter_by(
-                        agent_id=agent_id,
-                        date=date_obj
-                    ).first()
-                    
-                    if perf:
-                        perf.tickets_actual = tickets_processed
-                        perf.tickets_goal = tickets_goal
+                    # Get or Create Performance Object from Cache
+                    if date_obj in current_performances:
+                        perf = current_performances[date_obj]
+                        # If duplicate column, we Update (overwrite) with latest value
+                        # or sum? Usually Excel repeats are valid or errors. Overwrite is safer.
+                        if tickets_processed > 0 or tickets_goal > 0:
+                             perf.tickets_actual = tickets_processed
+                             perf.tickets_goal = tickets_goal
                     else:
+                        # Create New
                         perf = DailyPerformance(
                             agent_id=agent_id,
                             date=date_obj,
@@ -254,12 +273,18 @@ def process_file_csv(file_path):
                             points_goal=0.0
                         )
                         db.add(perf)
-                    
-                    processed_count += 1
+                        current_performances[date_obj] = perf
+                        processed_count += 1
+                        
                 except Exception as e:
                     print(f"Error parsing values for {date_obj}: {e}")
             
-            db.commit() # Commit per agent
+            # Commit per agent to keep transaction size manageable
+            try:
+                db.commit() 
+            except Exception as e:
+                db.rollback()
+                print(f"Error committing agent {raw_name}: {e}")
             
         print(f"Done. Processed {processed_count} records.")
 
