@@ -14,11 +14,13 @@ function TeamSettings() {
   const [success, setSuccess] = useState(null)
   
   // Modal states
+  const [isAddTeamModalOpen, setIsAddTeamModalOpen] = useState(false)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingAgent, setEditingAgent] = useState(null)
   
   // Form states
+  const [teamFormData, setTeamFormData] = useState({ name: '' })
   const [formData, setFormData] = useState({
     full_name: '',
     excel_alias: '',
@@ -80,6 +82,62 @@ function TeamSettings() {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }))
+  }
+
+  // Handle team form changes
+  const handleTeamFormChange = (e) => {
+    const { name, value } = e.target
+    setTeamFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
+  // Open add team modal
+  const handleOpenAddTeamModal = () => {
+    setTeamFormData({ name: '' })
+    setError(null)
+    setSuccess(null)
+    setIsAddTeamModalOpen(true)
+  }
+
+  // Close team modal
+  const handleCloseTeamModal = () => {
+    setIsAddTeamModalOpen(false)
+    setTeamFormData({ name: '' })
+    setError(null)
+    setSuccess(null)
+  }
+
+  // Create team
+  const handleCreateTeam = async (e) => {
+    e.preventDefault()
+    
+    if (!teamFormData.name.trim()) {
+      setError('Por favor ingresa un nombre para el equipo')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/teams`, {
+        name: teamFormData.name.trim()
+      })
+      
+      setSuccess('Equipo creado exitosamente')
+      handleCloseTeamModal()
+      fetchTeams()
+      // Auto-select the newly created team
+      setSelectedTeamId(response.data.id)
+    } catch (err) {
+      console.error('Error creating team:', err)
+      setError(err.response?.data?.detail || err.message || 'Error al crear el equipo')
+    } finally {
+      setLoading(false)
+    }
   }
 
   // Open add modal
@@ -233,18 +291,27 @@ function TeamSettings() {
               Configuración de Equipo
             </h2>
             <p className="text-gray-400 text-sm">
-              Gestiona los agentes de tu equipo
+              Gestiona los equipos y agentes
             </p>
           </div>
-          {selectedTeamId && (
+          <div className="flex gap-2">
             <button
-              onClick={handleOpenAddModal}
-              className="btn-primary flex items-center gap-2"
+              onClick={handleOpenAddTeamModal}
+              className="btn-secondary flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
-              Agregar Agente
+              Crear Equipo
             </button>
-          )}
+            {selectedTeamId && (
+              <button
+                onClick={handleOpenAddModal}
+                className="btn-primary flex items-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Agregar Agente
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Team Selector */}
@@ -272,7 +339,7 @@ function TeamSettings() {
           </div>
         ) : (
           <div className="p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg text-yellow-300">
-            No hay equipos disponibles. Por favor crea un equipo primero.
+            No hay equipos disponibles. Haz clic en "Crear Equipo" para comenzar.
           </div>
         )}
       </div>
@@ -396,6 +463,70 @@ function TeamSettings() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Add Team Modal */}
+      {isAddTeamModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-white">
+                Crear Equipo
+              </h3>
+              <button
+                onClick={handleCloseTeamModal}
+                className="p-2 text-gray-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTeam} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Nombre del Equipo *
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={teamFormData.name}
+                  onChange={handleTeamFormChange}
+                  placeholder="Ej: Equipo de Soporte A"
+                  className="input-field"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn-primary flex items-center gap-2 flex-1"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-5 h-5" />
+                      Crear Equipo
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseTeamModal}
+                  disabled={loading}
+                  className="btn-secondary"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
