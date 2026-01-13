@@ -17,7 +17,6 @@ function Dashboard() {
     const day = String(today.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   })
-  const [datePreset, setDatePreset] = useState('today') // 'today', 'yesterday', 'custom'
 
   const [globalTicketsGoal, setGlobalTicketsGoal] = useState(200)
   const [globalPointsGoal, setGlobalPointsGoal] = useState(8.0)
@@ -25,6 +24,18 @@ function Dashboard() {
   const [processedData, setProcessedData] = useState([])
   const [historicalMetrics, setHistoricalMetrics] = useState([])
   const [showHistory, setShowHistory] = useState(false)
+
+  // History filters
+  const [historyStartDate, setHistoryStartDate] = useState(() => {
+    const today = new Date()
+    const thirtyDaysAgo = new Date(today)
+    thirtyDaysAgo.setDate(today.getDate() - 30)
+    return thirtyDaysAgo.toISOString().split('T')[0]
+  })
+  const [historyEndDate, setHistoryEndDate] = useState(() => {
+    return new Date().toISOString().split('T')[0]
+  })
+  const [historyAgentFilter, setHistoryAgentFilter] = useState('')
 
   // Teams and Agents
   const [teams, setTeams] = useState([])
@@ -129,24 +140,6 @@ function Dashboard() {
     }
   }, [selectedTeamId])
 
-  // Handle Date Preset Change
-  const handleDatePresetChange = (preset) => {
-    setDatePreset(preset)
-    const today = new Date()
-
-    if (preset === 'today') {
-      const year = today.getFullYear()
-      const month = String(today.getMonth() + 1).padStart(2, '0')
-      const day = String(today.getDate()).padStart(2, '0')
-      setReportDate(`${year}-${month}-${day}`)
-    } else if (preset === 'yesterday') {
-      today.setDate(today.getDate() - 1)
-      const year = today.getFullYear()
-      const month = String(today.getMonth() + 1).padStart(2, '0')
-      const day = String(today.getDate()).padStart(2, '0')
-      setReportDate(`${year}-${month}-${day}`)
-    }
-  }
 
   // Handle manual data changes
   const handleManualDataChange = (agentId, field, value) => {
@@ -267,12 +260,24 @@ function Dashboard() {
       // Filter by selected team if available
       const params = {
         limit: 1000,
-        ...(selectedTeamId && { team_id: selectedTeamId })
+        ...(selectedTeamId && { team_id: selectedTeamId }),
+        ...(historyStartDate && { start_date: historyStartDate }),
+        ...(historyEndDate && { end_date: historyEndDate })
       }
       console.log(`[Dashboard] fetchHistoricalMetrics: API call - URL: ${url}`, params)
       const response = await axios.get(url, { params })
       console.log(`[Dashboard] fetchHistoricalMetrics: Success - received ${response.data.length} metrics`)
-      setHistoricalMetrics(response.data)
+
+      let metrics = response.data
+
+      // Client-side filtering for agent name (fuzzy search)
+      if (historyAgentFilter) {
+        metrics = metrics.filter(m =>
+          m.agent_name.toLowerCase().includes(historyAgentFilter.toLowerCase())
+        )
+      }
+
+      setHistoricalMetrics(metrics)
     } catch (err) {
       console.error('[Dashboard] fetchHistoricalMetrics: Error fetching metrics', {
         error: err,
@@ -285,7 +290,7 @@ function Dashboard() {
       setLoadingMetrics(false)
       console.log('[Dashboard] fetchHistoricalMetrics: Finished')
     }
-  }, [selectedTeamId])
+  }, [selectedTeamId, historyStartDate, historyEndDate, historyAgentFilter])
 
   // Load historical metrics when team changes or on component mount
   useEffect(() => {
@@ -323,17 +328,7 @@ function Dashboard() {
               Fecha del Reporte *
             </label>
             <div className="flex flex-col gap-2">
-              <select
-                value={datePreset}
-                onChange={(e) => handleDatePresetChange(e.target.value)}
-                className="input-field"
-              >
-                <option value="today">Hoy</option>
-                <option value="yesterday">Ayer</option>
-                <option value="custom">Personalizado...</option>
-              </select>
-
-              {datePreset === 'custom' && (
+              <div className="flex flex-col gap-2">
                 <input
                   type="date"
                   value={reportDate}
@@ -341,12 +336,7 @@ function Dashboard() {
                   className="input-field"
                   required
                 />
-              )}
-              {datePreset !== 'custom' && (
-                <div className="text-sm text-gray-400 px-1">
-                  Fecha seleccionada: {reportDate}
-                </div>
-              )}
+              </div>
             </div>
           </div>
 
@@ -632,7 +622,56 @@ function Dashboard() {
         </div>
 
         {showHistory && (
-          <div className="animate-fade-in">
+          <div className="animate-fade-in space-y-4">
+            {/* History Filters */}
+            <div className="p-4 bg-dark-800/50 rounded-lg border border-dark-700 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">
+                  Desde
+                </label>
+                <input
+                  type="date"
+                  value={historyStartDate}
+                  onChange={(e) => setHistoryStartDate(e.target.value)}
+                  className="input-field w-full text-sm py-1.5"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">
+                  Hasta
+                </label>
+                <input
+                  type="date"
+                  value={historyEndDate}
+                  onChange={(e) => setHistoryEndDate(e.target.value)}
+                  className="input-field w-full text-sm py-1.5"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">
+                  Filtrar por Agente
+                </label>
+                <input
+                  type="text"
+                  value={historyAgentFilter}
+                  onChange={(e) => setHistoryAgentFilter(e.target.value)}
+                  placeholder="Nombre del agente..."
+                  className="input-field w-full text-sm py-1.5"
+                />
+              </div>
+            </div>
+
+            {/* Refresh Button for Filters */}
+            <div className="flex justify-end">
+              <button
+                onClick={fetchHistoricalMetrics}
+                disabled={loadingMetrics}
+                className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1"
+              >
+                <RefreshCw className={`w-4 h-4 ${loadingMetrics ? 'animate-spin' : ''}`} />
+                Aplicar Filtros
+              </button>
+            </div>
             {historicalMetrics.length > 0 ? (
               <DailyTable data={historicalMetrics} onDelete={fetchHistoricalMetrics} />
             ) : (

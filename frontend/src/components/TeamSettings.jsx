@@ -44,6 +44,13 @@ function TeamSettings() {
     }
   }
 
+  // Auto-select first team whenever teams are loaded and no team is selected
+  useEffect(() => {
+    if (teams.length > 0 && !selectedTeamId) {
+      setSelectedTeamId(teams[0].id)
+    }
+  }, [teams, selectedTeamId])
+
   // Fetch agents
   const fetchAgents = async (teamId) => {
     if (!teamId) return
@@ -113,6 +120,8 @@ function TeamSettings() {
       // Automatically select the new team
       if (response.data && response.data.id) {
         setSelectedTeamId(response.data.id)
+        // Explicitly fetch agents for the new team
+        fetchAgents(response.data.id)
       }
     } catch (err) {
       console.error('Error creating team:', err)
@@ -323,9 +332,10 @@ function TeamSettings() {
             </label>
             <select
               value={selectedTeamId || ''}
-              onChange={(e) => setSelectedTeamId(parseInt(e.target.value))}
+              onChange={(e) => setSelectedTeamId(e.target.value ? parseInt(e.target.value) : null)}
               className="input-field w-full md:w-64"
             >
+              <option value="">Seleccionar Equipo...</option>
               {teams.map(team => (
                 <option key={team.id} value={team.id}>
                   {team.name}

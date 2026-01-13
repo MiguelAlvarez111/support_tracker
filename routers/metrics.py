@@ -26,6 +26,8 @@ async def get_metrics(
     limit: int = Query(1000, ge=1, le=10000, description="Maximum number of records to return"),
     team_id: Optional[int] = Query(None, description="Filter by team ID"),
     sprint_days: int = Query(10, ge=1, le=30, description="Number of days to calculate sprint burnout"),
+    start_date: Optional[date] = Query(None, description="Filter by start date"),
+    end_date: Optional[date] = Query(None, description="Filter by end date"),
     db: Session = Depends(get_db)
 ):
     """
@@ -42,7 +44,7 @@ async def get_metrics(
     - is_burnout: Whether agent exceeded burnout threshold (88h accumulated in sprint)
     - accumulated_hours: Total hours accumulated in sprint period
     """
-    logger.info(f"Getting metrics: limit={limit}, team_id={team_id}, sprint_days={sprint_days}")
+    logger.info(f"Getting metrics: limit={limit}, team_id={team_id}, sprint_days={sprint_days}, date_range={start_date} to {end_date}")
     try:
         # Build query
         query = db.query(
@@ -55,6 +57,12 @@ async def get_metrics(
         # Filter by team if provided
         if team_id is not None:
             query = query.filter(Agent.team_id == team_id)
+
+        # Filter by date range
+        if start_date:
+            query = query.filter(DailyPerformance.date >= start_date)
+        if end_date:
+            query = query.filter(DailyPerformance.date <= end_date)
         
         # Order by date descending and limit
         results = query.order_by(
