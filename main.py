@@ -15,7 +15,7 @@ from schemas import (
     RawDataUpload
 )
 from services.parser import parse_raw_text
-from routers import teams, agents, performances
+from routers import teams, agents, performances, metrics
 
 # Configure logging
 logging.basicConfig(
@@ -47,6 +47,7 @@ app.add_middleware(
 app.include_router(teams.router)
 app.include_router(agents.router)
 app.include_router(performances.router)
+app.include_router(metrics.router)
 
 
 @app.on_event("startup")
