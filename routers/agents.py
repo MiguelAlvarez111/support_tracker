@@ -29,10 +29,10 @@ async def create_agent(
     
     - **team_id**: ID of the team this agent belongs to
     - **full_name**: Full name of the agent
-    - **excel_alias**: Alias used in Excel files (e.g., 'M. ALVAREZ')
+    - **role**: Role of the agent (Agent/Leader)
     - **is_active**: Whether the agent is currently active (default: True)
     """
-    logger.info(f"Creating agent: team_id={agent.team_id}, full_name='{agent.full_name}', excel_alias='{agent.excel_alias}'")
+    logger.info(f"Creating agent: team_id={agent.team_id}, full_name='{agent.full_name}', role='{agent.role}'")
     # Verify team exists
     team = db.query(Team).filter(Team.id == agent.team_id).first()
     if not team:
@@ -42,24 +42,12 @@ async def create_agent(
             detail=f"Team with id {agent.team_id} not found"
         )
     
-    # Check if agent with same excel_alias in the same team already exists
-    existing_agent = db.query(Agent).filter(
-        Agent.team_id == agent.team_id,
-        Agent.excel_alias == agent.excel_alias
-    ).first()
-    if existing_agent:
-        logger.warning(f"Agent with excel_alias '{agent.excel_alias}' already exists in team {agent.team_id} (id: {existing_agent.id})")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Agent with excel_alias '{agent.excel_alias}' already exists in this team"
-        )
-    
     try:
         db_agent = Agent(**agent.model_dump())
         db.add(db_agent)
         db.commit()
         db.refresh(db_agent)
-        logger.info(f"Agent created successfully: id={db_agent.id}, full_name='{db_agent.full_name}', excel_alias='{db_agent.excel_alias}'")
+        logger.info(f"Agent created successfully: id={db_agent.id}, full_name='{db_agent.full_name}', role='{db_agent.role}'")
         return db_agent
     except Exception as e:
         logger.error(f"Error creating agent: {str(e)}", exc_info=True)
@@ -170,38 +158,6 @@ async def update_agent(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Team with id {agent_update.team_id} not found"
                 )
-            
-            # Check if excel_alias conflicts with another agent in the new team
-            if agent_update.excel_alias is None:
-                excel_alias = db_agent.excel_alias
-            else:
-                excel_alias = agent_update.excel_alias
-            
-            existing_agent = db.query(Agent).filter(
-                Agent.team_id == agent_update.team_id,
-                Agent.excel_alias == excel_alias,
-                Agent.id != agent_id
-            ).first()
-            if existing_agent:
-                logger.warning(f"Agent excel_alias conflict: '{excel_alias}' already exists in team {agent_update.team_id}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Agent with excel_alias '{excel_alias}' already exists in this team"
-                )
-        
-        # Check excel_alias conflict in current team if only excel_alias is being updated
-        if agent_update.excel_alias is not None and agent_update.team_id is None:
-            existing_agent = db.query(Agent).filter(
-                Agent.team_id == db_agent.team_id,
-                Agent.excel_alias == agent_update.excel_alias,
-                Agent.id != agent_id
-            ).first()
-            if existing_agent:
-                logger.warning(f"Agent excel_alias conflict: '{agent_update.excel_alias}' already exists in team {db_agent.team_id}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Agent with excel_alias '{agent_update.excel_alias}' already exists in this team"
-                )
         
         # Update only provided fields
         update_data = agent_update.model_dump(exclude_unset=True)
@@ -250,10 +206,9 @@ async def delete_agent(
     
     try:
         agent_name = db_agent.full_name
-        agent_alias = db_agent.excel_alias
         db.delete(db_agent)
         db.commit()
-        logger.info(f"Agent deleted successfully: id={agent_id}, full_name='{agent_name}', excel_alias='{agent_alias}'")
+        logger.info(f"Agent deleted successfully: id={agent_id}, full_name='{agent_name}'")
         return None
     except Exception as e:
         logger.error(f"Error deleting agent: {str(e)}", exc_info=True)

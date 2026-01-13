@@ -53,10 +53,10 @@ class TeamResponse(TeamBase):
 class AgentBase(BaseModel):
     """Base schema with common fields for Agent."""
     full_name: str = Field(..., description="Full name of the agent")
-    excel_alias: str = Field(..., description="Alias used in Excel files (e.g., 'M. ALVAREZ')")
+    role: str = Field("Agent", description="Role of the agent (Agent/Leader)")
     is_active: bool = Field(True, description="Whether the agent is currently active")
 
-    @field_validator('full_name', 'excel_alias')
+    @field_validator('full_name')
     @classmethod
     def validate_non_empty(cls, v):
         """Validate field is not empty."""
@@ -64,11 +64,13 @@ class AgentBase(BaseModel):
             raise ValueError('Field cannot be empty')
         return v.strip()
 
-    @field_validator('excel_alias')
+    @field_validator('role')
     @classmethod
-    def validate_excel_alias(cls, v):
-        """Validate and normalize excel_alias."""
-        return v.strip().upper()
+    def validate_role(cls, v):
+        """Validate role."""
+        if v not in ["Agent", "Leader"]:
+            raise ValueError('Role must be either "Agent" or "Leader"')
+        return v
 
 
 class AgentCreate(AgentBase):
@@ -80,10 +82,10 @@ class AgentUpdate(BaseModel):
     """Schema for updating an existing Agent."""
     team_id: Optional[int] = Field(None, description="ID of the team")
     full_name: Optional[str] = Field(None, description="Full name of the agent")
-    excel_alias: Optional[str] = Field(None, description="Alias used in Excel files")
+    role: Optional[str] = Field(None, description="Role of the agent")
     is_active: Optional[bool] = Field(None, description="Whether the agent is currently active")
 
-    @field_validator('full_name', 'excel_alias')
+    @field_validator('full_name')
     @classmethod
     def validate_non_empty(cls, v):
         """Validate field if provided."""
@@ -93,12 +95,12 @@ class AgentUpdate(BaseModel):
             return v.strip()
         return v
 
-    @field_validator('excel_alias')
+    @field_validator('role')
     @classmethod
-    def validate_excel_alias(cls, v):
-        """Validate and normalize excel_alias if provided."""
-        if v is not None:
-            return v.strip().upper()
+    def validate_role(cls, v):
+        """Validate role if provided."""
+        if v is not None and v not in ["Agent", "Leader"]:
+            raise ValueError('Role must be either "Agent" or "Leader"')
         return v
 
 
@@ -182,14 +184,3 @@ class TeamWithAgents(TeamResponse):
 class DailyPerformanceBulkCreate(BaseModel):
     """Schema for bulk creating multiple DailyPerformances."""
     performances: List[DailyPerformanceCreate] = Field(..., min_length=1, description="List of performances to create")
-
-
-# Raw data upload schema (updated to require team_id)
-class RawDataUpload(BaseModel):
-    """Schema for uploading raw text data from Excel."""
-    raw_data: str = Field(..., description="Raw text data copied from Excel")
-    team_id: int = Field(..., description="ID of the team for these metrics")
-    date: Optional[date_type] = Field(None, description="Date for the report (overrides dates in Excel)")
-    tickets_goal: Optional[int] = Field(None, ge=0, description="Global goal for tickets (applied to all agents)")
-    points_goal: Optional[float] = Field(None, ge=0.0, description="Global goal for squadlinx points (applied to all agents)")
-    base_year: Optional[int] = Field(None, description="Base year for dates (defaults to current year)")

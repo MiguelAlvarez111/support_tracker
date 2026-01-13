@@ -33,7 +33,7 @@ class Agent(Base):
     id = Column(Integer, primary_key=True, index=True)
     team_id = Column(Integer, ForeignKey("teams.id"), nullable=False, index=True)
     full_name = Column(String, nullable=False, index=True)
-    excel_alias = Column(String, nullable=False, index=True)
+    role = Column(String, nullable=False, default="Agent", index=True)  # 'Agent' or 'Leader'
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 
     # Relationships
@@ -43,7 +43,7 @@ class Agent(Base):
     def __repr__(self):
         return (
             f"<Agent(id={self.id}, team_id={self.team_id}, full_name='{self.full_name}', "
-            f"excel_alias='{self.excel_alias}', is_active={self.is_active})>"
+            f"role='{self.role}', is_active={self.is_active})>"
         )
 
 

@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { AlertTriangle, TrendingUp, Users, CreditCard } from 'lucide-react'
 
-function SprintStats({ metrics = [] }) {
+function SprintStats({ metrics = [], agents = [] }) {
   // Process metrics for last 10 days
   const sprintData = useMemo(() => {
     console.log(`[SprintStats] Processing metrics: count=${metrics?.length || 0}`)
@@ -30,10 +30,10 @@ function SprintStats({ metrics = [] }) {
 
     // Group by agent and calculate aggregates
     const agentMap = {}
-    
+
     filteredMetrics.forEach(metric => {
       const agentName = metric.agent_name || metric.agent?.full_name || 'Unknown'
-      
+
       if (!agentMap[agentName]) {
         agentMap[agentName] = {
           agentName,
@@ -43,12 +43,12 @@ function SprintStats({ metrics = [] }) {
           balance: 0
         }
       }
-      
+
       // Accumulate values (handle both possible field names)
       const ticketsActual = metric.tickets_processed || metric.tickets_actual || 0
       const ticketsGoal = metric.ticket_goal || metric.tickets_goal || 0
       const pointsActual = metric.squadlinx_points || metric.points_actual || 0
-      
+
       agentMap[agentName].ticketsActual += ticketsActual
       agentMap[agentName].ticketsGoal += ticketsGoal
       agentMap[agentName].pointsActual += pointsActual
@@ -65,11 +65,21 @@ function SprintStats({ metrics = [] }) {
     }).sort((a, b) => a.agentName.localeCompare(b.agentName))
 
     // Calculate summary statistics
-    const totalTickets = agentStats.reduce((sum, agent) => sum + agent.ticketsActual, 0)
     const teamDebt = agentStats.reduce((sum, agent) => {
+      // Only include non-leaders in team debt calculation
+      const isLeader = agents && agents.find(a => a.full_name === agent.agentName)?.role === 'Leader'
+      if (isLeader) return sum
+
       const deficit = agent.balance < 0 ? Math.abs(agent.balance) : 0
       return sum + deficit
     }, 0)
+
+    // Only count ticket totals for non-leaders
+    const totalTickets = agentStats.reduce((sum, agent) => {
+      const isLeader = agents && agents.find(a => a.full_name === agent.agentName)?.role === 'Leader'
+      return isLeader ? sum : sum + agent.ticketsActual
+    }, 0)
+
     const atRiskAgents = agentStats.filter(agent => agent.hoursAccumulated > 88).length
 
     console.log(`[SprintStats] Calculated stats: agents=${agentStats.length}, totalTickets=${totalTickets}, teamDebt=${teamDebt}, atRisk=${atRiskAgents}`)
@@ -79,7 +89,7 @@ function SprintStats({ metrics = [] }) {
       teamDebt,
       atRiskAgents
     }
-  }, [metrics])
+  }, [metrics, agents])
 
   const { agentStats, totalTickets, teamDebt, atRiskAgents } = sprintData
 
@@ -143,15 +153,18 @@ function SprintStats({ metrics = [] }) {
           <h3 className="text-lg font-semibold text-white mb-4">Balance de Tickets</h3>
           <ResponsiveContainer width="100%" height={Math.max(300, agentStats.length * 40)}>
             <BarChart
-              data={agentStats}
+              data={agentStats.filter(stat => {
+                const agent = agents?.find(a => a.full_name === stat.agentName)
+                return agent?.role !== 'Leader'
+              })}
               layout="vertical"
               margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis type="number" stroke="#9CA3AF" />
-              <YAxis 
-                dataKey="agentName" 
-                type="category" 
+              <YAxis
+                dataKey="agentName"
+                type="category"
                 width={90}
                 stroke="#9CA3AF"
                 tick={{ fill: '#D1D5DB', fontSize: 12 }}
@@ -172,9 +185,9 @@ function SprintStats({ metrics = [] }) {
               />
               <Bar dataKey="balance" radius={[0, 4, 4, 0]}>
                 {agentStats.map((entry, index) => (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={entry.balance >= 0 ? '#10B981' : '#EF4444'} 
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={entry.balance >= 0 ? '#10B981' : '#EF4444'}
                   />
                 ))}
               </Bar>
@@ -207,12 +220,12 @@ function SprintStats({ metrics = [] }) {
                 ) : (
                   agentStats.map((agent) => {
                     const isOverLimit = agent.hoursAccumulated > 88
-                    const rowClass = isOverLimit 
-                      ? 'bg-red-900/50 border-red-600 hover:bg-red-900/60' 
+                    const rowClass = isOverLimit
+                      ? 'bg-red-900/50 border-red-600 hover:bg-red-900/60'
                       : 'border-dark-700 hover:bg-dark-700/30'
-                    
+
                     return (
-                      <tr 
+                      <tr
                         key={agent.agentName}
                         className={`border-b ${rowClass} transition-colors`}
                       >
@@ -224,9 +237,8 @@ function SprintStats({ metrics = [] }) {
                             {agent.agentName}
                           </span>
                         </td>
-                        <td className={`py-2 px-3 text-sm text-right font-semibold ${
-                          isOverLimit ? 'text-red-300' : 'text-gray-300'
-                        }`}>
+                        <td className={`py-2 px-3 text-sm text-right font-semibold ${isOverLimit ? 'text-red-300' : 'text-gray-300'
+                          }`}>
                           {agent.hoursAccumulated.toFixed(1)} / 88
                         </td>
                       </tr>

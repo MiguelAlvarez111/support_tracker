@@ -1,7 +1,7 @@
 import { useState, useMemo, Fragment } from 'react'
 import { Calendar, TrendingUp, AlertTriangle } from 'lucide-react'
 
-function SprintHeatmap({ metrics = [] }) {
+function SprintHeatmap({ metrics = [], agentsList = [] }) {
   const [daysRange, setDaysRange] = useState(10)
 
   // Helper function to group metrics by agent and date
@@ -68,8 +68,8 @@ function SprintHeatmap({ metrics = [] }) {
   const getProductivityCellClass = (metric) => {
     if (!metric) return 'bg-dark-800 border-dark-700'
     const meetsGoal = metric.tickets_processed >= metric.ticket_goal
-    return meetsGoal 
-      ? 'bg-green-900/30 border-green-700 hover:bg-green-900/40' 
+    return meetsGoal
+      ? 'bg-green-900/30 border-green-700 hover:bg-green-900/40'
       : 'bg-red-900/30 border-red-700 hover:bg-red-900/40'
   }
 
@@ -134,7 +134,7 @@ function SprintHeatmap({ metrics = [] }) {
           </h3>
         </div>
         <div className="overflow-x-auto">
-          <div 
+          <div
             className="inline-block min-w-full"
             style={{
               display: 'grid',
@@ -155,42 +155,46 @@ function SprintHeatmap({ metrics = [] }) {
               </div>
             ))}
 
-            {/* Data rows */}
-            {agents.map(agent => (
-              <Fragment key={agent}>
-                <div
-                  className="bg-dark-800 p-3 text-sm font-medium text-gray-200 border border-dark-700 flex items-center"
-                >
-                  {agent}
-                </div>
-                {dates.map(date => {
-                  const metric = data[agent]?.[date]
-                  return (
-                    <div
-                      key={`${agent}-${date}`}
-                      className={`${getProductivityCellClass(metric)} p-3 text-center border transition-colors duration-150`}
-                    >
-                      {metric ? (
-                        <div className="space-y-1">
-                          <div className={`text-sm font-semibold ${
-                            metric.tickets_processed >= metric.ticket_goal 
-                              ? 'text-green-300' 
+            {/* Data rows - Excluding Leaders */}
+            {agents
+              .filter(agentName => {
+                const agent = agentsList?.find(a => a.full_name === agentName)
+                return agent?.role !== 'Leader'
+              })
+              .map(agent => (
+                <Fragment key={agent}>
+                  <div
+                    className="bg-dark-800 p-3 text-sm font-medium text-gray-200 border border-dark-700 flex items-center"
+                  >
+                    {agent}
+                  </div>
+                  {dates.map(date => {
+                    const metric = data[agent]?.[date]
+                    return (
+                      <div
+                        key={`${agent}-${date}`}
+                        className={`${getProductivityCellClass(metric)} p-3 text-center border transition-colors duration-150`}
+                      >
+                        {metric ? (
+                          <div className="space-y-1">
+                            <div className={`text-sm font-semibold ${metric.tickets_processed >= metric.ticket_goal
+                              ? 'text-green-300'
                               : 'text-red-300'
-                          }`}>
-                            {metric.tickets_processed}
+                              }`}>
+                              {metric.tickets_processed}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              / {metric.ticket_goal}
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-400">
-                            / {metric.ticket_goal}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-xs text-gray-500">-</div>
-                      )}
-                    </div>
-                  )
-                })}
-              </Fragment>
-            ))}
+                        ) : (
+                          <div className="text-xs text-gray-500">-</div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </Fragment>
+              ))}
           </div>
         </div>
       </div>
@@ -204,7 +208,7 @@ function SprintHeatmap({ metrics = [] }) {
           </h3>
         </div>
         <div className="overflow-x-auto">
-          <div 
+          <div
             className="inline-block min-w-full"
             style={{
               display: 'grid',
@@ -242,9 +246,8 @@ function SprintHeatmap({ metrics = [] }) {
                     >
                       {metric ? (
                         <div className="space-y-1">
-                          <div className={`text-sm font-semibold ${
-                            metric.is_burnout ? 'text-red-400' : 'text-gray-300'
-                          }`}>
+                          <div className={`text-sm font-semibold ${metric.is_burnout ? 'text-red-400' : 'text-gray-300'
+                            }`}>
                             {metric.squadlinx_points.toFixed(1)}
                           </div>
                           <div className="text-xs text-gray-400">

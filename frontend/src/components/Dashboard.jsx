@@ -535,7 +535,7 @@ function Dashboard() {
       )}
 
       {/* Sprint Stats */}
-      <SprintStats metrics={historicalMetrics} />
+      <SprintStats metrics={historicalMetrics} agents={agents} />
 
       {/* Sprint Heatmap */}
       <div className="card p-6">
@@ -566,7 +566,7 @@ function Dashboard() {
             )}
           </button>
         </div>
-        <SprintHeatmap metrics={historicalMetrics} />
+        <SprintHeatmap metrics={historicalMetrics} agentsList={agents} />
       </div>
     </div>
   )
