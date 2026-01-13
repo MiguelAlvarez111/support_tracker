@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Upload, Loader2, AlertCircle, CheckCircle2, RefreshCw, Save, Calendar, Target } from 'lucide-react'
+import { Loader2, AlertCircle, CheckCircle2, RefreshCw, Save, Calendar, Target } from 'lucide-react'
 import axios from 'axios'
 import DailyTable from './DailyTable'
 import SprintHeatmap from './SprintHeatmap'
@@ -15,9 +15,6 @@ function Dashboard() {
   const [globalTicketsGoal, setGlobalTicketsGoal] = useState(200)
   const [globalPointsGoal, setGlobalPointsGoal] = useState(8.0)
   
-  // Step 2: Data Entry
-  const [activeTab, setActiveTab] = useState('manual') // 'manual' or 'excel'
-  const [rawData, setRawData] = useState('')
   const [processedData, setProcessedData] = useState([])
   const [historicalMetrics, setHistoricalMetrics] = useState([])
   
@@ -40,6 +37,7 @@ function Dashboard() {
   // Fetch teams
   const fetchTeams = async () => {
     setLoadingTeams(true)
+    setError(null) // Clear any previous errors
     try {
       const response = await axios.get(`${API_BASE_URL}/api/teams`)
       setTeams(response.data)
@@ -48,7 +46,10 @@ function Dashboard() {
       }
     } catch (err) {
       console.error('Error fetching teams:', err)
-      setError('Error al cargar los equipos')
+      // Only show error if it's a real error, not just no teams
+      if (err.response?.status !== 404) {
+        setError('Error al cargar los equipos')
+      }
     } finally {
       setLoadingTeams(false)
     }
@@ -59,6 +60,7 @@ function Dashboard() {
     if (!teamId) return
     
     setLoadingAgents(true)
+    setError(null) // Clear any previous errors
     try {
       const response = await axios.get(`${API_BASE_URL}/api/agents`, {
         params: { team_id: teamId, is_active: true }
@@ -170,72 +172,6 @@ function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }
-
-  // Handle Excel upload
-  const handleExcelUpload = async () => {
-    if (!rawData.trim()) {
-      setError('Por favor, ingresa datos para procesar')
-      return
-    }
-
-    if (!selectedTeamId) {
-      setError('Por favor selecciona un equipo')
-      return
-    }
-
-    if (!reportDate) {
-      setError('Por favor selecciona una fecha')
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-    setSuccess(null)
-
-    try {
-      const response = await axios.post(
-        `${API_BASE_URL}/upload-raw-data`,
-        {
-          raw_data: rawData,
-          team_id: selectedTeamId,
-          date: reportDate,
-          tickets_goal: globalTicketsGoal,
-          points_goal: globalPointsGoal
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      )
-
-      setProcessedData(response.data)
-      setSuccess(`Datos procesados exitosamente. ${response.data.length} registros cargados.`)
-      setRawData('') // Clear textarea after successful processing
-      
-      // Refresh metrics
-      setTimeout(() => {
-        fetchHistoricalMetrics()
-      }, 500)
-    } catch (err) {
-      console.error('Error processing data:', err)
-      setError(
-        err.response?.data?.detail || 
-        err.message || 
-        'Error al procesar los datos. Por favor, verifica el formato.'
-      )
-      setProcessedData([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleClear = () => {
-    setRawData('')
-    setProcessedData([])
-    setError(null)
-    setSuccess(null)
   }
 
   const fetchHistoricalMetrics = async () => {
@@ -372,176 +308,103 @@ function Dashboard() {
             Datos de los Agentes
           </h2>
           <p className="text-gray-400 text-sm">
-            Ingresa los datos de los agentes manualmente o pega desde Excel
+            Ingresa los datos de los agentes manualmente
           </p>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-dark-700">
-          <button
-            onClick={() => setActiveTab('manual')}
-            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
-              activeTab === 'manual'
-                ? 'border-primary-600 text-white'
-                : 'border-transparent text-gray-400 hover:text-white'
-            }`}
-          >
-            Carga Manual
-          </button>
-          <button
-            onClick={() => setActiveTab('excel')}
-            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
-              activeTab === 'excel'
-                ? 'border-primary-600 text-white'
-                : 'border-transparent text-gray-400 hover:text-white'
-            }`}
-          >
-            Pegar desde Excel
-          </button>
-        </div>
-
-        {/* Manual Tab */}
-        {activeTab === 'manual' && (
-          <div className="space-y-4">
-            {loadingAgents ? (
-              <div className="flex items-center justify-center py-12 text-gray-400">
-                <Loader2 className="w-6 h-6 animate-spin mr-2" />
-                Cargando agentes...
-              </div>
-            ) : agents.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                {selectedTeamId ? (
-                  <p>No hay agentes activos en este equipo.</p>
-                ) : (
-                  <p>Por favor selecciona un equipo primero.</p>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="border-b border-dark-700">
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
-                          Agente
-                        </th>
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
-                          Tickets Real
-                        </th>
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
-                          Puntos Real
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {agents.map((agent) => (
-                        <tr
-                          key={agent.id}
-                          className="border-b border-dark-800 hover:bg-dark-800/50 transition-colors"
-                        >
-                          <td className="py-3 px-4 text-gray-100">
-                            {agent.full_name}
-                            <span className="ml-2 text-xs text-gray-500 font-mono">
-                              ({agent.excel_alias})
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <input
-                              type="number"
-                              value={manualData[agent.id]?.tickets_actual || ''}
-                              onChange={(e) => handleManualDataChange(agent.id, 'tickets_actual', e.target.value)}
-                              className="input-field w-32"
-                              min="0"
-                              placeholder="0"
-                            />
-                          </td>
-                          <td className="py-3 px-4">
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={manualData[agent.id]?.points_actual || ''}
-                              onChange={(e) => handleManualDataChange(agent.id, 'points_actual', e.target.value)}
-                              className="input-field w-32"
-                              min="0"
-                              placeholder="0.0"
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex justify-end">
-                  <button
-                    onClick={handleManualSave}
-                    disabled={loading}
-                    className="btn-primary flex items-center gap-2"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Guardando...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-5 h-5" />
-                        Guardar Todo
-                      </>
-                    )}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Excel Tab */}
-        {activeTab === 'excel' && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Datos crudos (Excel)
-              </label>
-              <textarea
-                value={rawData}
-                onChange={(e) => setRawData(e.target.value)}
-                placeholder="Pega aquí los datos copiados desde Excel..."
-                className="input-field min-h-[200px] font-mono text-sm"
-                disabled={loading}
-              />
+        {/* Manual Entry */}
+        <div className="space-y-4">
+          {loadingAgents ? (
+            <div className="flex items-center justify-center py-12 text-gray-400">
+              <Loader2 className="w-6 h-6 animate-spin mr-2" />
+              Cargando agentes...
             </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleExcelUpload}
-                disabled={loading || !rawData.trim()}
-                className="btn-primary flex items-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Procesando...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-5 h-5" />
-                    Procesar Data
-                  </>
-                )}
-              </button>
-              {(rawData || processedData.length > 0) && (
-                <button
-                  onClick={handleClear}
-                  disabled={loading}
-                  className="btn-secondary"
-                >
-                  Limpiar
-                </button>
+          ) : agents.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              {selectedTeamId ? (
+                <p>No hay agentes activos en este equipo.</p>
+              ) : (
+                <p>Por favor selecciona un equipo primero.</p>
               )}
             </div>
-          </div>
-        )}
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b border-dark-700">
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
+                        Agente
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
+                        Tickets Real
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-300">
+                        Puntos Real
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {agents.map((agent) => (
+                      <tr
+                        key={agent.id}
+                        className="border-b border-dark-800 hover:bg-dark-800/50 transition-colors"
+                      >
+                        <td className="py-3 px-4 text-gray-100">
+                          {agent.full_name}
+                          <span className="ml-2 text-xs text-gray-500 font-mono">
+                            ({agent.excel_alias})
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <input
+                            type="number"
+                            value={manualData[agent.id]?.tickets_actual || ''}
+                            onChange={(e) => handleManualDataChange(agent.id, 'tickets_actual', e.target.value)}
+                            className="input-field w-32"
+                            min="0"
+                            placeholder="0"
+                          />
+                        </td>
+                        <td className="py-3 px-4">
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={manualData[agent.id]?.points_actual || ''}
+                            onChange={(e) => handleManualDataChange(agent.id, 'points_actual', e.target.value)}
+                            className="input-field w-32"
+                            min="0"
+                            placeholder="0.0"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={handleManualSave}
+                  disabled={loading}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-5 h-5" />
+                      Guardar Todo
+                    </>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Status Messages */}
